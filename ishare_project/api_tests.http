@@ -1,0 +1,43 @@
+curl -X POST http://127.0.0.1:8000/api/auth/register/ \
+  -H "Content-Type: application/json" \
+  -d '{"username":"charles","password":"Secret123!","password2":"Secret123!","email":"charles@example.com"}'
+curl -X POST http://127.0.0.1:8000/api/auth/token/ \
+  -H "Content-Type: application/json" \
+  -d '{"username":"charles","password":"Secret123!"}'
+curl -X POST http://127.0.0.1:8000/api/trips/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <access_token>" \
+  -d '{
+    "start_location_name":"Kigali City",
+    "start_lat":-1.9579,
+    "start_lng":30.0606,
+    "destination_name":"Butare",
+    "dest_lat":-2.5960,
+    "dest_lng":29.7390,
+    "departure_time":"2025-11-20T09:00:00Z",
+    "available_seats":3,
+    "price_per_seat":"3.50"
+  }'
+  curl "http://127.0.0.1:8000/api/trips/search/?start=Kigali&dest=Butare"
+
+curl -X POST http://127.0.0.1:8000/api/bookings/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <access_token_of_passenger>" \
+  -d '{"trip_id": 1, "seats_booked": 1}'
+  curl -X POST http://127.0.0.1:8000/api/payments/simulate/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <access_token_of_passenger>" \
+  -d '{"booking_id": 1, "provider_txn_id":"sim-001"}'
+  curl -X GET "http://127.0.0.1:8000/api/profiles/me/" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+curl -X PATCH "http://127.0.0.1:8000/api/profiles/me/" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"+250788123456", "role":"driver", "bio":"I drive every weekend"}'
+curl -X PATCH "http://127.0.0.1:8000/api/profiles/me/" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -F "avatar=@/path/to/myphoto.jpg" \
+  -F "phone=+250788123456" \
+  -F "role=driver"
+
+

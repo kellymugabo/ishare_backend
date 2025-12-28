@@ -1,0 +1,1 @@
+web: gunicorn ishare_backend.wsgi

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "424647601674",
+    "project_id": "ishare-app-d47b5",
+    "storage_bucket": "ishare-app-d47b5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:424647601674:android:2e959ad365a5cc90f0b9f3",
+        "android_client_info": {
+          "package_name": "com.example.ishare_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBhRVnvJr5hqE707ah8gkpUGS2gQ034LIA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
