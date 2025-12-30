@@ -8,9 +8,9 @@ import '../models/trip_model.dart';
 import '../models/booking_model.dart';
 
 // ⚠️ NETWORK CONFIGURATION
-// Use "http://127.0.0.1:8000" for Windows Desktop, Edge (Web), or iOS Simulator.
-// Use "http://10.0.2.2:8000" ONLY for Android Emulator.
-const String baseUrl = "http://127.0.0.1:8000";
+// ✅ PRODUCTION SERVER (Railway)
+// We use HTTPS because Android/iOS block HTTP by default for security.
+const String baseUrl = "https://web-production-e6ac6.up.railway.app";
 
 class ApiService {
   final Dio _dio = Dio();
@@ -455,8 +455,8 @@ class ApiService {
       rethrow;
     }
   }
-// ... inside ApiService class ...
-// ✅ Rate Driver
+
+  // ✅ Rate Driver
   Future<void> rateDriver({
     required int tripId,
     required int driverId,
@@ -465,12 +465,8 @@ class ApiService {
   }) async {
     try {
       final data = {
-        // ✅ FIX 1: Server asked for 'trip', so we give it 'trip'
         'trip': tripId,      
-        
-        // ✅ FIX 2: Keeping 'ratee_id' because the previous error asked for it
         'ratee_id': driverId,   
-        
         'score': rating, 
         'comment': comment,
       };
