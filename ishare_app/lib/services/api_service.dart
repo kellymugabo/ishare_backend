@@ -8,9 +8,9 @@ import '../models/trip_model.dart';
 import '../models/booking_model.dart';
 
 // ⚠️ NETWORK CONFIGURATION
-// ✅ PRODUCTION SERVER (Railway)
+// ✅ PRODUCTION SERVER (Render)
 // We use HTTPS because Android/iOS block HTTP by default for security.
-const String baseUrl = "https://web-production-e6ac6.up.railway.app";
+const String baseUrl = "https://ishare-api.onrender.com";
 
 class ApiService {
   final Dio _dio = Dio();
