@@ -24,6 +24,11 @@ class DriverVerification(models.Model):
         max_length=13,
         validators=[RegexValidator(regex=r'^\+250\d{9}$', message='Phone number must be in format +250XXXXXXXXX')]
     )
+    
+    # ✅ ADDED THESE LINES (Optional Photos)
+    national_id_photo = models.ImageField(upload_to='verification/', null=True, blank=True)
+    license_photo = models.ImageField(upload_to='verification/', null=True, blank=True)
+
     status = models.CharField(max_length=20, choices=VerificationStatus.choices, default=VerificationStatus.PENDING)
     submitted_at = models.DateTimeField(auto_now_add=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
@@ -54,7 +59,6 @@ class UserProfile(models.Model):
     
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     reset_code = models.CharField(max_length=6, blank=True, null=True)
-    # ✅ FIX: Renamed 'avatar' to 'profile_picture' to match Flutter & Serializer
     profile_picture = models.ImageField(upload_to='profile_pics/', null=True, blank=True)
     
     bio = models.TextField(blank=True)
@@ -97,13 +101,11 @@ class Trip(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
 
-
-    # ✅ NEW: Amenities & Preferences
+    # Amenities & Preferences
     has_ac = models.BooleanField(default=False, verbose_name="Air Conditioning")
     allows_luggage = models.BooleanField(default=False, verbose_name="Large Luggage Allowed")
     no_smoking = models.BooleanField(default=True, verbose_name="No Smoking")
     has_music = models.BooleanField(default=False, verbose_name="Music Available")
-
 
     class Meta:
         ordering = ['-created_at']
@@ -115,8 +117,8 @@ class Trip(models.Model):
 class Booking(models.Model):
     STATUS_CHOICES = (
         ('pending', 'Pending'),
-        ('approved', 'Approved'), # ✅ ADDED THIS STATUS
-        ('confirmed', 'Confirmed'), # This means Paid
+        ('approved', 'Approved'),
+        ('confirmed', 'Confirmed'),
         ('canceled', 'Canceled'),
         ('completed', 'Completed'),
     )
@@ -129,13 +131,8 @@ class Booking(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
-        # 1. Calculate Price
         if not self.total_price:
             self.total_price = self.seats_booked * self.trip.price_per_seat
-
-        # ✅ REMOVED: Automatic seat deduction logic.
-        # Seats will now only decrease when Driver hits "Approve" in the View logic.
-        
         super().save(*args, **kwargs)
 
     def __str__(self):

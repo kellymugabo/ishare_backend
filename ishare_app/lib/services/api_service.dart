@@ -9,7 +9,6 @@ import '../models/booking_model.dart';
 
 // ⚠️ NETWORK CONFIGURATION
 // ✅ PRODUCTION SERVER (Render)
-// We use HTTPS because Android/iOS block HTTP by default for security.
 const String baseUrl = "https://ishare-api.onrender.com";
 
 class ApiService {
@@ -368,10 +367,40 @@ class ApiService {
     }
   }
 
+  // ✅ UPDATED: Handles File Uploads for Verification Correctly
   Future<void> submitDriverVerification(Map<String, dynamic> data) async {
     try {
-      await _dio.post('/api/driver/verify/', data: data);
+      final formData = FormData();
+
+      // Loop through all data to handle both Text and Files
+      for (var entry in data.entries) {
+        if (entry.value is XFile) {
+          // If it is a File (Image), prepare it for upload
+          final XFile file = entry.value;
+          final bytes = await file.readAsBytes();
+          formData.files.add(MapEntry(
+            entry.key,
+            MultipartFile.fromBytes(bytes, filename: file.name),
+          ));
+        } else if (entry.value != null) {
+          // If it is just Text, send as string
+          formData.fields.add(MapEntry(entry.key, entry.value.toString()));
+        }
+      }
+
+      await _dio.post(
+        '/api/driver/verify/', 
+        data: formData,
+        // options: Options(contentType: 'multipart/form-data'), // Dio does this automatically with FormData
+      );
+      
+      debugPrint('✅ Verification submitted successfully');
     } catch (e) {
+      debugPrint('❌ Verification Failed: $e');
+      if (e is DioException && e.response != null) {
+        debugPrint('Server Reason: ${e.response?.data}');
+        throw Exception(e.response?.data.toString());
+      }
       rethrow;
     }
   }
