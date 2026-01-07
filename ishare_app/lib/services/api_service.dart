@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:flutter/foundation.dart'; // For debugPrint
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint; // For debugPrint
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/user_model.dart';
@@ -21,6 +21,12 @@ class ApiService {
     _dio.options.connectTimeout = const Duration(seconds: 60);
     _dio.options.receiveTimeout = const Duration(seconds: 60);
     
+    // Web-specific configuration for CORS
+    if (kIsWeb) {
+      _dio.options.headers['Content-Type'] = 'application/json';
+      _dio.options.headers['Accept'] = 'application/json';
+    }
+    
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         final token = await _storage.read(key: 'access_token');
@@ -33,7 +39,14 @@ class ApiService {
         return handler.next(options);
       },
       onError: (DioException e, handler) async {
-        debugPrint('❌ API Error: ${e.response?.statusCode} - ${e.message}');
+        // Better error logging for web CORS issues
+        if (kIsWeb && e.type == DioExceptionType.connectionError) {
+          debugPrint('❌ CORS/Network Error: ${e.message}');
+          debugPrint('   This is likely a CORS configuration issue on the backend.');
+          debugPrint('   Backend URL: ${e.requestOptions.uri}');
+        } else {
+          debugPrint('❌ API Error: ${e.response?.statusCode} - ${e.message}');
+        }
         
         if (e.response?.statusCode == 401 && !_isRefreshing) {
           _isRefreshing = true;

@@ -10,7 +10,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 // 🌍 LOCALIZATION IMPORT
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ishare_app/l10n/app_localizations.dart';
 
 import '../../services/api_service.dart';
 import '../../models/trip_model.dart';

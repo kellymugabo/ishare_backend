@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // 🌍 LOCALIZATION IMPORT
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ishare_app/l10n/app_localizations.dart';
 
 import '../../services/api_service.dart';
 import '../../models/user_model.dart';

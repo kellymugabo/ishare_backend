@@ -135,13 +135,22 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# CORS settings
+# CORS settings - Fixed for Flutter Web
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:8000",
+    "http://localhost:*",  # Flutter web dev server
+    "http://127.0.0.1:*",  # Flutter web dev server
 ]
-CORS_ALLOW_ALL_ORIGINS = True # Allow mobile apps to connect easily
+
+# ✅ CRITICAL: Allow all origins for web (Flutter web uses dynamic ports)
+# This is safe because we're using JWT tokens for authentication
+CORS_ALLOW_ALL_ORIGINS = True
+
+# ✅ Allow credentials (cookies, authorization headers)
 CORS_ALLOW_CREDENTIALS = True
+
+# ✅ Allowed HTTP methods
 CORS_ALLOW_METHODS = [
     'DELETE',
     'GET',
@@ -150,17 +159,31 @@ CORS_ALLOW_METHODS = [
     'POST',
     'PUT',
 ]
+
+# ✅ Allowed headers (including Authorization for JWT)
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
-    'authorization',
+    'authorization',  # ✅ Critical for JWT Bearer tokens
     'content-type',
     'dnt',
     'origin',
     'user-agent',
     'x-csrftoken',
     'x-requested-with',
+    'access-control-allow-origin',  # ✅ Additional header support
+    'access-control-allow-methods',
+    'access-control-allow-headers',
 ]
+
+# ✅ Expose headers to the client
+CORS_EXPOSE_HEADERS = [
+    'content-type',
+    'authorization',
+]
+
+# ✅ Preflight cache duration (in seconds)
+CORS_PREFLIGHT_MAX_AGE = 86400  # 24 hours
 
 # REST Framework settings
 REST_FRAMEWORK = {

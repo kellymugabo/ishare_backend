@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 // 🌍 LOCALIZATION IMPORT
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ishare_app/l10n/app_localizations.dart';
 
 import '../../constants/app_theme.dart'; // ✅ Using shared theme
 import 'create_trips_screen.dart';

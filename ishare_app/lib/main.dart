@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart'; 
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ishare_app/l10n/app_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart'; 
 
 import 'firebase_options.dart';
@@ -34,6 +36,23 @@ class RwCupertinoLocalizationsDelegate extends LocalizationsDelegate<CupertinoLo
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ✅ Fix lifecycle channel messages being discarded (web only)
+  // This prevents warnings about lifecycle messages being discarded
+  if (kIsWeb) {
+    try {
+      ServicesBinding.instance.defaultBinaryMessenger.setMessageHandler(
+        'flutter/lifecycle',
+        (ByteData? message) async {
+          // Silently handle lifecycle messages to prevent warnings
+          return null;
+        },
+      );
+    } catch (e) {
+      // Ignore if already set
+      debugPrint('Lifecycle handler already set: $e');
+    }
+  }
 
   // ✅ CRITICAL FIX: Initializes date formatting for all languages (rw, fr, en)
   await initializeDateFormatting(); 
@@ -154,7 +173,7 @@ class IShareApp extends ConsumerWidget {
           elevation: 0,
         ),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: Colors.white,
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.0)),

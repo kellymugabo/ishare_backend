@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ishare_app/l10n/app_localizations.dart';
 
 import '../../services/api_service.dart';
 import '../../constants/app_theme.dart';
@@ -161,8 +161,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
         // Clean up error message for display
         String msg = e.toString().replaceAll("Exception: ", "");
         
+        // Handle specific error types
         if (msg.contains("401") || msg.contains("400")) {
           msg = l10n.incorrectCredentials;
+        } else if (msg.contains("XMLHttpRequest") || msg.contains("connection error") || msg.contains("CORS")) {
+          // CORS or network connection error
+          msg = "Connection Error: Unable to reach the server. Please check your internet connection or contact support if the problem persists.";
+        } else if (msg.contains("timeout") || msg.contains("TimeoutException")) {
+          msg = "Request timed out. Please try again.";
         }
         
         _showErrorSnackBar(msg);
@@ -344,15 +350,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
                                     )
                                   : Row(
                                       mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Text(
-                                          "${l10n.login} (${_isDriver ? "Driver" : "Passenger"})", 
-                                          style: const TextStyle(
-                                            fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white,
+                                        Flexible(
+                                          child: Text(
+                                            "${l10n.login} (${_isDriver ? "Driver" : "Passenger"})", 
+                                            style: const TextStyle(
+                                              fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
                                           ),
                                         ),
                                         const SizedBox(width: 8),
-                                        const Icon(Icons.arrow_forward_rounded, color: Colors.white),
+                                        const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 20),
                                       ],
                                     ),
                             ),
