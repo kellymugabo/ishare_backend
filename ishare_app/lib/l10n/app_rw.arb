@@ -382,12 +382,47 @@
   "noBookingsMessage": "Nta rugendo urabikuza.",
   "noOffersMessage": "Nta rugendo wari watanga.",
   "rideRequests": "Ubusabe bw'ingendo",
-
-    "editProfile": "Hindura Umwirondoro",
-    "accountSettings": "Igenamiterere rya Konti",
-    "contactUs": "Twandikire",
-    "logOut": "Sohoka"
-
-
-
+  "editProfile": "Hindura Umwirondoro",
+  "accountSettings": "Igenamiterere rya Konti",
+  "contactUs": "Twandikire",
+  "logOut": "Sohoka",
+  "paymentPhoneNumber": "Numero ya Telefone yo Kwishyura",
+  "paymentInstructions": "Nyamuneka kohereza amafaranga y'abanyamuryango kuri numero ya telefone kuri Mobile Money (MTN/Airtel). Nyuma yo kwishyura, abanyamuryango bazagurwa mu buryo bwihuse.",
+  "subscriptionTitle": "Abanyamuryango",
+  "subscriptionStatus": "Imiterere y'Abanyamuryango",
+  "trialPeriod": "Igihe cy'Ubwoba",
+  "activeSubscription": "Abanyamuryango b'Abahoze",
+  "subscriptionExpired": "Abanyamuryango Barangije",
+  "daysRemaining": "Iminsi {days} isigaye",
+  "@daysRemaining": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "pleaseRenewSubscription": "Nyamuneka wongeraho ukoreshe iShare",
+  "subscriptionPlans": "Gahunda z'Abanyamuryango",
+  "perMonth": "ukwezi",
+  "renewSubscription": "Ongeraho Abanyamuryango",
+  "subscribeNow": "Injira Ubu",
+  "payAmount": "Shyura {amount} RWF",
+  "@payAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "trialEndsIn": "Igihe cy'ubwoba kirahera mu minsi {days}. Injira ubu wongeraho ukoreshe iShare nyuma y'igihe cy'ubwoba.",
+  "@trialEndsIn": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "paymentViaMobileMoney": "Kwishyura kuri Mobile Money (MTN/Airtel)",
+  "passengerLabel": "Abahaguruka",
+  "driverLabel": "Abashoferi"
 }

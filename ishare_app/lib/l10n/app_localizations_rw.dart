@@ -878,7 +878,7 @@ class AppLocalizationsRw extends AppLocalizations {
   String get bookedStatus => 'Yabikijwe';
 
   @override
-  String get driverLabel => 'Umushoferi';
+  String get driverLabel => 'Abashoferi';
 
   @override
   String get ticketInstruction =>
@@ -1016,4 +1016,63 @@ class AppLocalizationsRw extends AppLocalizations {
 
   @override
   String get editProfile => 'Hindura Umwirondoro';
+
+  @override
+  String get paymentPhoneNumber => 'Numero ya Telefone yo Kwishyura';
+
+  @override
+  String get paymentInstructions =>
+      'Nyamuneka kohereza amafaranga y\'abanyamuryango kuri numero ya telefone kuri Mobile Money (MTN/Airtel). Nyuma yo kwishyura, abanyamuryango bazagurwa mu buryo bwihuse.';
+
+  @override
+  String get subscriptionTitle => 'Abanyamuryango';
+
+  @override
+  String get subscriptionStatus => 'Imiterere y\'Abanyamuryango';
+
+  @override
+  String get trialPeriod => 'Igihe cy\'Ubwoba';
+
+  @override
+  String get activeSubscription => 'Abanyamuryango b\'Abahoze';
+
+  @override
+  String get subscriptionExpired => 'Abanyamuryango Barangije';
+
+  @override
+  String daysRemaining(int days) {
+    return 'Iminsi $days isigaye';
+  }
+
+  @override
+  String get pleaseRenewSubscription => 'Nyamuneka wongeraho ukoreshe iShare';
+
+  @override
+  String get subscriptionPlans => 'Gahunda z\'Abanyamuryango';
+
+  @override
+  String get perMonth => 'ukwezi';
+
+  @override
+  String get renewSubscription => 'Ongeraho Abanyamuryango';
+
+  @override
+  String get subscribeNow => 'Injira Ubu';
+
+  @override
+  String payAmount(String amount) {
+    return 'Shyura $amount RWF';
+  }
+
+  @override
+  String trialEndsIn(int days) {
+    return 'Igihe cy\'ubwoba kirahera mu minsi $days. Injira ubu wongeraho ukoreshe iShare nyuma y\'igihe cy\'ubwoba.';
+  }
+
+  @override
+  String get paymentViaMobileMoney =>
+      'Kwishyura kuri Mobile Money (MTN/Airtel)';
+
+  @override
+  String get passengerLabel => 'Abahaguruka';
 }

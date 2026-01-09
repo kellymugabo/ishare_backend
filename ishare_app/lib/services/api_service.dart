@@ -6,10 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/user_model.dart';
 import '../models/trip_model.dart';
 import '../models/booking_model.dart';
+import '../models/subscription_model.dart';
 
 // ⚠️ NETWORK CONFIGURATION
 
-const String baseUrl = "https://ishare-production.up.railway.app";
+const String baseUrl = "https://amiable-amazement-production-4d09.up.railway.app";
 
 class ApiService {
   final Dio _dio = Dio();
@@ -421,8 +422,39 @@ class ApiService {
   Future<Map<String, dynamic>> checkDriverVerification() async {
     try {
       final response = await _dio.get('/api/driver/verification-status/');
-      return response.data;
+      final data = response.data ?? {};
+      
+      // Debug: Log the raw backend response
+      debugPrint('📡 Raw Backend Response: $data');
+      debugPrint('   - is_verified: ${data['is_verified']} (${data['is_verified'].runtimeType})');
+      debugPrint('   - status: ${data['status']} (${data['status']?.runtimeType})');
+      
+      // Get status as string (handle both string and enum cases)
+      final statusStr = data['status']?.toString().toLowerCase();
+      final isVerified = data['is_verified'] == true || 
+                         data['is_verified'] == 'true' || 
+                         statusStr == 'approved';
+      
+      // Normalize the response to handle different backend formats
+      final normalized = {
+        'is_verified': isVerified,
+        'status': statusStr ?? (isVerified ? 'approved' : 'none'),
+        'has_pending': statusStr == 'pending',
+        // Keep all original fields
+      };
+      
+      // Add original data for backward compatibility (without overwriting normalized values)
+      data.forEach((key, value) {
+        if (!normalized.containsKey(key)) {
+          normalized[key] = value;
+        }
+      });
+      
+      debugPrint('📦 Normalized Response: $normalized');
+      
+      return normalized;
     } catch (e) {
+      debugPrint('❌ Error checking driver verification status: $e');
       rethrow;
     }
   }
@@ -430,11 +462,27 @@ class ApiService {
   Future<bool> isDriverVerified() async {
     try {
       final response = await _dio.get('/api/driver/verification-status/');
-      if (response.data != null && response.data['is_verified'] == true) {
-        return true;
+      if (response.data != null) {
+        final data = response.data;
+        
+        // Get status as string (handle both string and enum cases)
+        final statusStr = data['status']?.toString().toLowerCase();
+        
+        // Check multiple possible formats from backend
+        final isVerified = data['is_verified'] == true || 
+                          data['is_verified'] == 'true' ||
+                          statusStr == 'approved' ||
+                          data['verification_status']?.toString().toLowerCase() == 'approved';
+        
+        if (isVerified) {
+          debugPrint('✅ Driver is verified (status: $statusStr, is_verified: ${data['is_verified']})');
+          return true;
+        }
+        debugPrint('⚠️ Driver verification status: ${statusStr ?? data['is_verified'] ?? 'unknown'}');
       }
       return false;
     } catch (e) {
+      debugPrint('❌ Error checking driver verification: $e');
       return false;
     }
   }
@@ -525,6 +573,53 @@ class ApiService {
       rethrow;
     }
   }
+
+  // =====================================================
+  // SUBSCRIPTION METHODS
+  // =====================================================
+
+  Future<Map<String, dynamic>> getSubscriptionStatus() async {
+    try {
+      final response = await _dio.get('/api/subscription/status/');
+      return response.data;
+    } catch (e) {
+      debugPrint('❌ Failed to get subscription status: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> checkSubscriptionAccess() async {
+    try {
+      final response = await _dio.get('/api/subscription/check/');
+      return response.data;
+    } catch (e) {
+      debugPrint('❌ Failed to check subscription access: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> processSubscriptionPayment({
+    required String phoneNumber,
+    String paymentMethod = 'mobile_money',
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/api/subscription/pay/',
+        data: {
+          'phone_number': phoneNumber,
+          'payment_method': paymentMethod,
+        },
+      );
+      debugPrint('✅ Subscription payment processed');
+      return response.data;
+    } catch (e) {
+      debugPrint('❌ Failed to process subscription payment: $e');
+      if (e is DioException && e.response != null) {
+        debugPrint('Server Response: ${e.response?.data}');
+      }
+      rethrow;
+    }
+  }
 } // ⬅️ 🛑 IMPORTANT: This closing brace ends the ApiService class!
 
 // =====================================================
@@ -557,3 +652,7 @@ final userProfileProvider = FutureProvider.autoDispose<UserProfileModel>((ref) a
   final apiService = ref.watch(apiServiceProvider);
   return await apiService.fetchMyProfile();
 });
+
+// =====================================================
+// SUBSCRIPTION METHODS
+// =====================================================

@@ -1,18 +1,18 @@
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.conf import settings
-from django.conf.urls.static import static
+from django.views.static import serve
 
 urlpatterns = [
     path('admin/', admin.site.urls),
 
-    # ✅ THIS IS THE FIX:
-    # We send ALL traffic starting with 'api/' to your api/urls.py file.
-    # Since api/urls.py already has 'auth/token/', the result will be:
-    # domain.com/api/auth/token/ (Exactly what Flutter wants!)
+    # ✅ API Routes
     path('api/', include('api.urls')),
-]
 
-# Allow media files (photos) to load during development/debug mode
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    # ✅ FORCE MEDIA SERVING (The Fix)
+    # This tells Django: "Any URL starting with /media/ MUST be served from the MEDIA_ROOT folder."
+    # We use re_path here because the standard static() function disables itself when DEBUG=False.
+    re_path(r'^media/(?P<path>.*)$', serve, {
+        'document_root': settings.MEDIA_ROOT,
+    }),
+]

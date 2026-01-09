@@ -364,5 +364,44 @@
   "enterPhoneError": "Please enter phone number",
   "invalidPhoneError": "Invalid phone number",
   "rideRequests": "Ride Requests",
-  "editProfile": "Edit Profile"
+  "editProfile": "Edit Profile",
+  "paymentPhoneNumber": "Payment Phone Number",
+  "paymentInstructions": "Please send the subscription amount to this phone number via Mobile Money (MTN/Airtel). After payment, your subscription will be activated automatically.",
+  "subscriptionTitle": "Subscription",
+  "subscriptionStatus": "Subscription Status",
+  "trialPeriod": "Trial Period",
+  "activeSubscription": "Active Subscription",
+  "subscriptionExpired": "Subscription Expired",
+  "daysRemaining": "{days} days remaining",
+  "@daysRemaining": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "pleaseRenewSubscription": "Please renew to continue using iShare",
+  "subscriptionPlans": "Subscription Plans",
+  "perMonth": "per month",
+  "renewSubscription": "Renew Subscription",
+  "subscribeNow": "Subscribe Now",
+  "payAmount": "Pay {amount} RWF",
+  "@payAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "trialEndsIn": "Your trial ends in {days} days. Subscribe now to continue using iShare after the trial.",
+  "@trialEndsIn": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "paymentViaMobileMoney": "Payment via Mobile Money (MTN/Airtel)",
+  "passengerLabel": "Passenger",
+  "driverLabel": "Driver"
 }

@@ -640,7 +640,7 @@ class _FindRidesScreenState extends ConsumerState<FindRidesScreen> {
                 ],
                 strokeWidth: 4.0,
                 color: AppTheme.primaryBlue.withOpacity(0.7), // Semi-transparent blue
-               
+                
               );
             }).toList(),
           ),
@@ -716,7 +716,7 @@ class _FindRidesScreenState extends ConsumerState<FindRidesScreen> {
 }
 
 // =====================================================
-// 3. IMPROVED PROFESSIONAL RIDE CARD (WITH AMENITIES)
+// 3. IMPROVED PROFESSIONAL RIDE CARD (WITH CRASH PROTECTION)
 // =====================================================
 class _RideCardWithData extends ConsumerWidget {
   final TripModel trip;
@@ -738,6 +738,18 @@ class _RideCardWithData extends ConsumerWidget {
     } else {
       return DateFormat('EEE, MMM d').format(trip.departureTime);
     }
+  }
+
+  // ✅ HELPER: Force HTTPS to prevent connection errors
+  String _getValidUrl(String url) {
+    if (url.startsWith('http')) {
+      if (url.contains('127.0.0.1') || url.contains('localhost')) {
+        return url;
+      }
+      return url.replaceFirst('http://', 'https://');
+    }
+    // Handle relative paths
+    return url.startsWith('/') ? "http://127.0.0.1:8000$url" : "http://127.0.0.1:8000/$url";
   }
 
   // ✅ HELPER: Build Amenity Icon
@@ -801,7 +813,7 @@ class _RideCardWithData extends ConsumerWidget {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // --- CAR IMAGE ---
+                      // --- CAR IMAGE (FIXED) ---
                       Stack(
                         children: [
                           Container(
@@ -810,13 +822,22 @@ class _RideCardWithData extends ConsumerWidget {
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(18),
                               color: AppTheme.surfaceGrey,
-                              image: (trip.carPhotoUrl != null && trip.carPhotoUrl!.isNotEmpty)
-                                  ? DecorationImage(image: NetworkImage(trip.carPhotoUrl!), fit: BoxFit.cover)
-                                  : null,
                             ),
-                            child: (trip.carPhotoUrl == null || trip.carPhotoUrl!.isEmpty)
-                                ? Icon(Icons.directions_car_rounded, color: Colors.grey[400], size: 40)
-                                : null,
+                            // ✅ FIXED: Using ClipRRect + Image.network + errorBuilder
+                            // This replaces "DecorationImage" which crashes on 404
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(18),
+                              child: (trip.carPhotoUrl != null && trip.carPhotoUrl!.isNotEmpty)
+                                  ? Image.network(
+                                      _getValidUrl(trip.carPhotoUrl!),
+                                      fit: BoxFit.cover,
+                                      // If the image is 404 or fails, show this icon instead of crashing
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return Icon(Icons.directions_car_rounded, color: Colors.grey[400], size: 40);
+                                      },
+                                    )
+                                  : Icon(Icons.directions_car_rounded, color: Colors.grey[400], size: 40),
+                            ),
                           ),
                           if (isFull)
                             Positioned.fill(
@@ -937,7 +958,7 @@ class _RideCardWithData extends ConsumerWidget {
                             
                             const SizedBox(height: 6),
 
-                            // ✅ NEW: AMENITIES ROW (Professional Touch)
+                            // AMENITIES ROW
                             Row(
                               children: [
                                 _buildAmenity(Icons.ac_unit_rounded, "AC", hasAC),

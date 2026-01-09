@@ -50,6 +50,17 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     }
   }
 
+  // ✅ HELPER: Force HTTPS to prevent connection errors
+  String _getValidUrl(String url) {
+    if (url.startsWith('http')) {
+      if (url.contains('127.0.0.1') || url.contains('localhost')) {
+        return url;
+      }
+      return url.replaceFirst('http://', 'https://');
+    }
+    return url.startsWith('/') ? "http://127.0.0.1:8000$url" : "http://127.0.0.1:8000/$url";
+  }
+
   Future<void> _pickImage({required bool isProfile}) async {
     final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
@@ -61,23 +72,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         }
       });
     }
-  }
-
-  // 🖼️ Web-Safe Image Preview
-  ImageProvider? _getSafeImage(XFile? file, String? networkUrl) {
-    if (file != null) {
-      if (kIsWeb) return NetworkImage(file.path); // Web Blob URL
-      return FileImage(File(file.path)); // Mobile File
-    }
-    if (networkUrl != null && networkUrl.isNotEmpty) {
-      // Fix relative URL for display
-      String finalUrl = networkUrl;
-      if (!networkUrl.startsWith('http')) {
-        finalUrl = "http://127.0.0.1:8000$networkUrl";
-      }
-      return NetworkImage(finalUrl);
-    }
-    return null;
   }
 
   Future<void> _saveProfile() async {
@@ -136,17 +130,20 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- Profile Pic ---
+                  // --- Profile Pic (Fixed for Crashes) ---
                   Center(
                     child: GestureDetector(
                       onTap: () => _pickImage(isProfile: true),
                       child: CircleAvatar(
                         radius: 50,
                         backgroundColor: Colors.grey[300],
-                        backgroundImage: _getSafeImage(_profileImage, profile.profilePicture),
-                        child: (_profileImage == null && profile.profilePicture == null) 
-                          ? const Icon(Icons.camera_alt, size: 30, color: Colors.grey) 
-                          : null,
+                        // Use child with ClipOval to handle errors safely
+                        child: ClipOval(
+                          child: SizedBox(
+                            width: 100, height: 100,
+                            child: _buildProfileImageWidget(_profileImage, profile.profilePicture),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -166,7 +163,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
                   const SizedBox(height: 15),
                   
-                  // --- Car Photo Upload Box ---
+                  // --- Car Photo Upload Box (Fixed for Crashes) ---
                   GestureDetector(
                     onTap: () => _pickImage(isProfile: false),
                     child: Container(
@@ -176,22 +173,13 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                         color: Colors.white,
                         border: Border.all(color: Colors.grey.shade300),
                         borderRadius: BorderRadius.circular(10),
-                        image: _getSafeImage(_vehicleImage, profile.vehiclePhoto) != null
-                            ? DecorationImage(
-                                image: _getSafeImage(_vehicleImage, profile.vehiclePhoto)!,
-                                fit: BoxFit.cover,
-                              )
-                            : null,
+                        // REMOVED 'image: DecorationImage' because it crashes on 404
                       ),
-                      child: (_vehicleImage == null && profile.vehiclePhoto == null)
-                          ? Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
-                                Icon(Icons.add_a_photo, size: 40, color: Colors.grey),
-                                Text("Tap to upload car photo", style: TextStyle(color: Colors.grey)),
-                              ],
-                            )
-                          : null,
+                      // ADDED ClipRRect to contain the image cleanly
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: _buildVehicleImageWidget(_vehicleImage, profile.vehiclePhoto),
+                      ),
                     ),
                   ),
 
@@ -213,6 +201,56 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, s) => Center(child: Text("Error: $e")),
       ),
+    );
+  }
+
+  // ✅ WIDGET BUILDER: Handles Local File vs Network URL vs 404 Error (Profile)
+  Widget _buildProfileImageWidget(XFile? localFile, String? remoteUrl) {
+    if (localFile != null) {
+      if (kIsWeb) return Image.network(localFile.path, fit: BoxFit.cover);
+      return Image.file(File(localFile.path), fit: BoxFit.cover);
+    }
+    if (remoteUrl != null && remoteUrl.isNotEmpty) {
+      return Image.network(
+        _getValidUrl(remoteUrl),
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return const Icon(Icons.person, size: 50, color: Colors.grey);
+        },
+      );
+    }
+    return const Icon(Icons.camera_alt, size: 30, color: Colors.grey);
+  }
+
+  // ✅ WIDGET BUILDER: Handles Local File vs Network URL vs 404 Error (Vehicle)
+  Widget _buildVehicleImageWidget(XFile? localFile, String? remoteUrl) {
+    // 1. Show Local File if selected
+    if (localFile != null) {
+      if (kIsWeb) return Image.network(localFile.path, fit: BoxFit.cover);
+      return Image.file(File(localFile.path), fit: BoxFit.cover);
+    }
+    // 2. Show Remote URL if exists (With Error Handling)
+    if (remoteUrl != null && remoteUrl.isNotEmpty) {
+      return Image.network(
+        _getValidUrl(remoteUrl),
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          // If 404, show the upload placeholder
+          return _buildUploadPlaceholder();
+        },
+      );
+    }
+    // 3. Default Placeholder
+    return _buildUploadPlaceholder();
+  }
+
+  Widget _buildUploadPlaceholder() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: const [
+        Icon(Icons.add_a_photo, size: 40, color: Colors.grey),
+        Text("Tap to upload car photo", style: TextStyle(color: Colors.grey)),
+      ],
     );
   }
 

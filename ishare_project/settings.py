@@ -76,6 +76,11 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+# ✅ Trust proxy headers for HTTPS detection (required for Railway)
+if 'RAILWAY_ENVIRONMENT' in os.environ or not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    USE_TZ = True
+
 ROOT_URLCONF = 'ishare_project.urls'
 
 TEMPLATES = [
@@ -135,11 +140,29 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 # Enable WhiteNoise's compression and caching support
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-# ✅ MEDIA FILES (User Uploads like Car Photos)
-# Note: On Railway/Heroku, local files (Media) are deleted when the server restarts.
-# For production, you eventually need AWS S3 or Cloudinary. For now, this works for testing.
+# =========================================================
+# ✅ MEDIA FILES CONFIGURATION (FIXED FOR RAILWAY VOLUME)
+# =========================================================
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# If we are on Railway, FORCE the path to /app/media (Where the volume is)
+if 'RAILWAY_ENVIRONMENT' in os.environ:
+    MEDIA_ROOT = '/app/media'
+else:
+    # If local laptop, use the default folder
+    MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# 🔍 DEBUGGING: Print this to the logs so we can see what is happening
+print(f"📂 CONFIG: MEDIA_ROOT is set to: {MEDIA_ROOT}")
+try:
+    if not os.path.exists(MEDIA_ROOT):
+        print(f"⚠️ WARNING: {MEDIA_ROOT} does not exist yet (It will be created on first upload)")
+    else:
+        # Check if we can see any files inside
+        files = os.listdir(MEDIA_ROOT)
+        print(f"✅ SUCCESS: {MEDIA_ROOT} exists. Found {len(files)} files/folders: {files}")
+except Exception as e:
+    print(f"❌ ERROR checking media folder: {e}")
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

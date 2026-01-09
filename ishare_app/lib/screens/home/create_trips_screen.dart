@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:dio/dio.dart';
 // 🌍 LOCALIZATION IMPORT
 import 'package:ishare_app/l10n/app_localizations.dart';
 
@@ -11,6 +13,7 @@ import '../../constants/app_theme.dart';
 // ✅ SCREENS IMPORTS
 import '../auth/login_screen.dart';
 import 'driververification_screen.dart';
+import 'subscription_screen.dart';
 
 class CreateTripScreen extends ConsumerStatefulWidget {
   const CreateTripScreen({super.key});
@@ -120,15 +123,15 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> with Single
 
           // 2. Main Content Area
           Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 400),
-              switchInCurve: Curves.easeOut,
-              switchOutCurve: Curves.easeIn,
-              child: SingleChildScrollView(
-                key: ValueKey<int>(_currentStep),
-                padding: const EdgeInsets.all(24),
-                child: Form(
-                  key: _formKey,
+            child: Form(
+              key: _formKey,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 400),
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                child: SingleChildScrollView(
+                  key: ValueKey<int>(_currentStep),
+                  padding: const EdgeInsets.all(24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -714,15 +717,67 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> with Single
 
   Future<void> _submitTrip() async {
     final apiService = ref.read(apiServiceProvider);
+    final l10n = AppLocalizations.of(context)!;
     
     // Auth & Verification Checks
     if (!await apiService.isLoggedIn()) {
       _showAuthDialog();
       return;
     }
-    if (!await apiService.isDriverVerified()) {
-      _showVerifyDialog();
-      return;
+    
+    // Check verification status with detailed error handling
+    try {
+      final verificationStatus = await apiService.checkDriverVerification();
+      
+      // Check if verified
+      if (verificationStatus['is_verified'] != true && 
+          verificationStatus['status'] != 'approved') {
+        
+        // Check if pending
+        if (verificationStatus['status'] == 'pending' || 
+            verificationStatus['has_pending'] == true) {
+          if (mounted) {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Verification Pending'),
+                content: const Text(
+                  'Your driver verification is still under review. '
+                  'Please wait for approval before publishing rides.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            );
+          }
+          return;
+        }
+        
+        // Not verified and not pending - show verification dialog
+        _showVerifyDialog();
+        return;
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error checking verification status: $e');
+      // Continue with submission - backend will validate
+    }
+
+    // ✅ Check subscription status before creating trip
+    try {
+      final subscriptionData = await apiService.checkSubscriptionAccess();
+      if (subscriptionData['has_access'] == false) {
+        if (mounted) {
+          _showSubscriptionDialog(subscriptionData);
+        }
+        return;
+      }
+    } catch (e) {
+      debugPrint('⚠️ Could not check subscription: $e');
+      // Continue anyway - backend will validate
     }
 
     setState(() => _isLoading = true);
@@ -758,10 +813,68 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> with Single
         Navigator.pop(context);
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red));
+      if (mounted) {
+        String errorMessage = 'Failed to publish ride';
+        
+        // Check if it's a subscription error
+        if (e.toString().contains('subscription') || e.toString().contains('expired')) {
+          errorMessage = 'Your subscription has expired. Please renew to publish rides.';
+        } else if (e is DioException && e.response?.data != null) {
+          final errorData = e.response!.data;
+          if (errorData is Map) {
+            errorMessage = errorData['error'] ?? errorData['detail'] ?? errorMessage;
+          }
+        } else {
+          errorMessage = e.toString().replaceAll('Exception: ', '');
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          )
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showSubscriptionDialog(Map<String, dynamic> subscriptionData) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Subscription Expired'),
+        content: Text(
+          'Your subscription has expired. Please renew your subscription to publish rides.\n\n'
+          'Price: ${subscriptionData['subscription_price'] ?? 10000} RWF\n'
+          'Days remaining: ${subscriptionData['days_remaining'] ?? 0}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              Navigator.pop(context); // Close create trip screen
+              // Navigate directly to subscription screen
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryBlue,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Renew Subscription'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showAuthDialog() {

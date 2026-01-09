@@ -24,18 +24,55 @@ class EmailThread(threading.Thread):
 # =====================================================
 
 def send_welcome_email(user):
-    subject = "Welcome to ISHARE! 🚗"
+    subject = "Welcome to iShare! 🚗✨"
     # Fallback to username if first_name is missing
     name = user.first_name if user.first_name else user.username
+    role = user.profile.role if hasattr(user, 'profile') and user.profile.role else 'passenger'
+    role_display = 'Driver' if role == 'driver' else 'Passenger'
     
     message = f"""
-    Hello {name},
+🎉 Congratulations, {name}!
 
-    Congratulations! You have successfully registered to ISHARE as a {user.profile.role.upper()}.
+Welcome to iShare - Rwanda's Smart Carpooling Platform! 🚗
 
-    We are excited to have you on board.
-    
-    - The ISHARE Team
+We're thrilled to have you join our community! You have successfully created your account as a {role_display}.
+
+📱 Your Account Details:
+   • Username: {user.username}
+   • Email: {user.email}
+   • Account Type: {role_display}
+   
+🎁 Special Welcome Offer:
+   You're now on a 1-month FREE TRIAL! Enjoy unlimited access to:
+   • Post rides (for drivers)
+   • Book seats (for passengers)
+   • Connect with verified users
+   • Save money on every trip
+
+💡 What's Next?
+   • Complete your profile to get verified
+   • Start posting or booking rides
+   • Build your rating and trust score
+   • Enjoy safe, affordable travel!
+
+🔐 Security First:
+   All our drivers and passengers are verified for your safety and peace of mind.
+
+💰 After Your Trial:
+   Subscription costs:
+   • Passengers: 5,000 RWF/month
+   • Drivers: 10,000 RWF/month
+
+We're here to make your travel experience better, cheaper, and more eco-friendly.
+
+Have questions? Reach out to us anytime - we'd love to help!
+
+Safe travels,
+The iShare Team 🌍
+
+---
+iShare Rwanda
+Share the ride, share the cost 💙
     """
     EmailThread(subject, message, [user.email]).start()
 

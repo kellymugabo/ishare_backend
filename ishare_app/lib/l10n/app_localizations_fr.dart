@@ -890,7 +890,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get bookedStatus => 'Réservé(s)';
 
   @override
-  String get driverLabel => 'Chauffeur';
+  String get driverLabel => 'Conducteur';
 
   @override
   String get ticketInstruction =>
@@ -1029,4 +1029,63 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get editProfile => 'Modifier le profil';
+
+  @override
+  String get paymentPhoneNumber => 'Numéro de téléphone pour paiement';
+
+  @override
+  String get paymentInstructions =>
+      'Veuillez envoyer le montant de l\'abonnement à ce numéro de téléphone via Mobile Money (MTN/Airtel). Après le paiement, votre abonnement sera activé automatiquement.';
+
+  @override
+  String get subscriptionTitle => 'Abonnement';
+
+  @override
+  String get subscriptionStatus => 'Statut de l\'abonnement';
+
+  @override
+  String get trialPeriod => 'Période d\'essai';
+
+  @override
+  String get activeSubscription => 'Abonnement actif';
+
+  @override
+  String get subscriptionExpired => 'Abonnement expiré';
+
+  @override
+  String daysRemaining(int days) {
+    return '$days jours restants';
+  }
+
+  @override
+  String get pleaseRenewSubscription =>
+      'Veuillez renouveler pour continuer à utiliser iShare';
+
+  @override
+  String get subscriptionPlans => 'Plans d\'abonnement';
+
+  @override
+  String get perMonth => 'par mois';
+
+  @override
+  String get renewSubscription => 'Renouveler l\'abonnement';
+
+  @override
+  String get subscribeNow => 'S\'abonner maintenant';
+
+  @override
+  String payAmount(String amount) {
+    return 'Payer $amount RWF';
+  }
+
+  @override
+  String trialEndsIn(int days) {
+    return 'Votre période d\'essai se termine dans $days jours. Abonnez-vous maintenant pour continuer à utiliser iShare après l\'essai.';
+  }
+
+  @override
+  String get paymentViaMobileMoney => 'Paiement via Mobile Money (MTN/Airtel)';
+
+  @override
+  String get passengerLabel => 'Passager';
 }

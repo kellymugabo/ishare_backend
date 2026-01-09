@@ -1016,4 +1016,62 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get editProfile => 'Edit Profile';
+
+  @override
+  String get paymentPhoneNumber => 'Payment Phone Number';
+
+  @override
+  String get paymentInstructions =>
+      'Please send the subscription amount to this phone number via Mobile Money (MTN/Airtel). After payment, your subscription will be activated automatically.';
+
+  @override
+  String get subscriptionTitle => 'Subscription';
+
+  @override
+  String get subscriptionStatus => 'Subscription Status';
+
+  @override
+  String get trialPeriod => 'Trial Period';
+
+  @override
+  String get activeSubscription => 'Active Subscription';
+
+  @override
+  String get subscriptionExpired => 'Subscription Expired';
+
+  @override
+  String daysRemaining(int days) {
+    return '$days days remaining';
+  }
+
+  @override
+  String get pleaseRenewSubscription => 'Please renew to continue using iShare';
+
+  @override
+  String get subscriptionPlans => 'Subscription Plans';
+
+  @override
+  String get perMonth => 'per month';
+
+  @override
+  String get renewSubscription => 'Renew Subscription';
+
+  @override
+  String get subscribeNow => 'Subscribe Now';
+
+  @override
+  String payAmount(String amount) {
+    return 'Pay $amount RWF';
+  }
+
+  @override
+  String trialEndsIn(int days) {
+    return 'Your trial ends in $days days. Subscribe now to continue using iShare after the trial.';
+  }
+
+  @override
+  String get paymentViaMobileMoney => 'Payment via Mobile Money (MTN/Airtel)';
+
+  @override
+  String get passengerLabel => 'Passenger';
 }

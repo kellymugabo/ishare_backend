@@ -1,10 +1,12 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from django.conf import settings
+import os
 # ✅ REQUIRED for calculating booked seats and ratings
 from django.db.models import Sum, Avg 
 from .models import (
     UserProfile, Trip, Booking, Rating, PaymentTransaction,
-    DriverVerification, VerificationStatus
+    DriverVerification, VerificationStatus, Subscription
 )
 import re
 
@@ -149,6 +151,10 @@ class RegisterSerializer(serializers.ModelSerializer):
         vehicle_photo = validated_data.pop('vehicle_photo', None)
         validated_data.pop('password2')
 
+        # ✅ Try to get vehicle_photo from request.FILES if not in validated_data
+        if not vehicle_photo and self.context.get('request'):
+            vehicle_photo = self.context['request'].FILES.get('vehicle_photo')
+
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data.get('email', ''),
@@ -160,9 +166,17 @@ class RegisterSerializer(serializers.ModelSerializer):
         profile, created = UserProfile.objects.get_or_create(user=user)
         profile.role = role
         if role == 'driver':
-            profile.vehicle_model = vehicle_model
-            profile.vehicle_plate_number = plate_number
+            if vehicle_model:
+                profile.vehicle_model = vehicle_model
+            if plate_number:
+                profile.vehicle_plate_number = plate_number
+            # ✅ Always save vehicle_photo if provided (for drivers)
+            if vehicle_photo:
+                profile.vehicle_photo = vehicle_photo
+        # ✅ Also save vehicle_photo if provided even if role is not driver (for flexibility)
+        elif vehicle_photo:
             profile.vehicle_photo = vehicle_photo
+        
         profile.save()
         return user
 
@@ -195,7 +209,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     # ✅ Add these fields for the Public Profile Screen
     rating = serializers.SerializerMethodField()
     reviews = SimpleReviewSerializer(source='user.received_ratings', many=True, read_only=True)
-
+    
     class Meta:
         model = UserProfile
         fields = [
@@ -215,6 +229,79 @@ class UserProfileSerializer(serializers.ModelSerializer):
         if ratings.exists():
             return round(ratings.aggregate(Avg('score'))['score__avg'], 1)
         return 5.0 # Default to 5.0
+    
+    # ✅ Override to_representation to convert relative URLs to absolute URLs
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        request = self.context.get('request')
+        
+        # ✅ Determine the correct scheme (HTTPS for production, HTTP for development)
+        # Check if we're on Railway/production - ALWAYS use HTTPS for Railway domains
+        host_str = str(request.get_host()).lower() if request and hasattr(request, 'get_host') else ''
+        is_production = (
+            'RAILWAY_ENVIRONMENT' in os.environ or 
+            not settings.DEBUG or 
+            'railway' in host_str or
+            '.railway.app' in host_str or
+            '.up.railway.app' in host_str
+        )
+        
+        def build_absolute_url(url_path):
+            """Build absolute URL with correct scheme"""
+            if not url_path or url_path in [None, '']:
+                return None
+            url_str = str(url_path)
+            if url_str.startswith('http'):
+                # ✅ If already absolute but HTTP in production, force HTTPS
+                if is_production and url_str.startswith('http://'):
+                    url_str = url_str.replace('http://', 'https://', 1)
+                return url_str
+            
+            if request:
+                try:
+                    # Use request to build absolute URI (respects HTTPS if behind proxy)
+                    absolute_url = request.build_absolute_uri(url_str)
+                    # ✅ Force HTTPS in production if request doesn't detect it
+                    if is_production and absolute_url.startswith('http://'):
+                        absolute_url = absolute_url.replace('http://', 'https://', 1)
+                    return absolute_url
+                except Exception:
+                    pass
+            
+            # Fallback: build URL manually - ALWAYS use HTTPS for Railway
+            if request and hasattr(request, 'get_host'):
+                host = request.get_host()
+                # ✅ Force HTTPS for Railway domains
+                if '.railway.app' in host.lower() or '.up.railway.app' in host.lower():
+                    scheme = 'https'
+                else:
+                    scheme = 'https' if is_production else 'http'
+            elif settings.ALLOWED_HOSTS and len(settings.ALLOWED_HOSTS) > 0:
+                # Use the actual Railway domain, not wildcards
+                host = next((h for h in settings.ALLOWED_HOSTS if '.' in h and h != '*'), 
+                           settings.ALLOWED_HOSTS[0] if settings.ALLOWED_HOSTS else 'localhost')
+                # ✅ Force HTTPS for Railway domains
+                if '.railway.app' in str(host).lower() or '.up.railway.app' in str(host).lower():
+                    scheme = 'https'
+                else:
+                    scheme = 'https' if is_production else 'http'
+            else:
+                host = 'localhost'
+                scheme = 'http'
+            
+            return f"{scheme}://{host}{url_str}"
+        
+        # ✅ Convert vehicle_photo URL to absolute
+        vehicle_url = representation.get('vehicle_photo')
+        if vehicle_url:
+            representation['vehicle_photo'] = build_absolute_url(vehicle_url)
+        
+        # ✅ Convert profile_picture URL to absolute
+        profile_url = representation.get('profile_picture')
+        if profile_url:
+            representation['profile_picture'] = build_absolute_url(profile_url)
+        
+        return representation
 
     def update(self, instance, validated_data):
         user_data = {}
@@ -225,13 +312,47 @@ class UserProfileSerializer(serializers.ModelSerializer):
         if 'email' in validated_data:
             user_data['email'] = validated_data.pop('email')
         
+        # ✅ Handle vehicle_photo from request.FILES if not in validated_data
+        # This handles multipart/form-data file uploads
+        vehicle_photo = None
+        if 'vehicle_photo' in validated_data:
+            vehicle_photo = validated_data['vehicle_photo']
+        elif self.context.get('request') and self.context['request'].FILES.get('vehicle_photo'):
+            vehicle_photo = self.context['request'].FILES.get('vehicle_photo')
+            validated_data['vehicle_photo'] = vehicle_photo
+        
+        # ✅ Handle profile_picture from request.FILES if not in validated_data
+        profile_picture = None
+        if 'profile_picture' in validated_data:
+            profile_picture = validated_data['profile_picture']
+        elif self.context.get('request') and self.context['request'].FILES.get('profile_picture'):
+            profile_picture = self.context['request'].FILES.get('profile_picture')
+            validated_data['profile_picture'] = profile_picture
+        
+        # ✅ Update user fields if needed
         if user_data:
             user = instance.user
             for attr, value in user_data.items():
                 setattr(user, attr, value)
             user.save()
 
-        return super().update(instance, validated_data)
+        # ✅ Update the instance (this will handle file fields automatically)
+        instance = super().update(instance, validated_data)
+        
+        # ✅ Explicitly save file fields if they were uploaded
+        file_updated = False
+        if vehicle_photo:
+            instance.vehicle_photo = vehicle_photo
+            file_updated = True
+        if profile_picture:
+            instance.profile_picture = profile_picture
+            file_updated = True
+        
+        # ✅ Save again if files were updated
+        if file_updated:
+            instance.save()
+        
+        return instance
 
 
 # -------------------- TRIPS (UPDATED FOR SOLD OUT & RATINGS) --------------------
@@ -334,7 +455,13 @@ class BookingSerializer(serializers.ModelSerializer):
     trip_id = serializers.PrimaryKeyRelatedField(
         queryset=Trip.objects.all(),
         source='trip',
-        write_only=True
+        write_only=True,
+        required=True,
+        error_messages={
+            'required': 'This field is required.',
+            'does_not_exist': 'Trip does not exist.',
+            'incorrect_type': 'Trip ID must be a valid number.'
+        }
     )
 
     class Meta:
@@ -407,3 +534,38 @@ class PaymentSerializer(serializers.ModelSerializer):
             'id', 'user', 'provider', 'provider_transaction_id',
             'created_at', 'paid_at'
         ]
+
+
+class SubscriptionSerializer(serializers.ModelSerializer):
+    """Serializer for Subscription model"""
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
+    username = serializers.CharField(source='user.username', read_only=True)
+    user_role = serializers.CharField(source='user.profile.role', read_only=True)
+    is_active = serializers.SerializerMethodField()
+    days_remaining = serializers.SerializerMethodField()
+    subscription_price = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Subscription
+        fields = [
+            'id', 'user_id', 'username', 'user_role',
+            'status', 'trial_started_at', 'trial_ends_at',
+            'subscription_started_at', 'subscription_ends_at',
+            'amount_paid', 'payment_method', 'payment_transaction_id',
+            'last_payment_date', 'is_active', 'days_remaining',
+            'subscription_price', 'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'user_id', 'username', 'user_role',
+            'trial_started_at', 'subscription_started_at',
+            'created_at', 'updated_at'
+        ]
+    
+    def get_is_active(self, obj):
+        return obj.is_active()
+    
+    def get_days_remaining(self, obj):
+        return obj.get_days_remaining()
+    
+    def get_subscription_price(self, obj):
+        return float(obj.get_subscription_price())

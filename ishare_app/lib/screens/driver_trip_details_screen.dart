@@ -87,7 +87,11 @@ class DriverTripDetailsScreen extends ConsumerWidget {
       fit: StackFit.expand,
       children: [
         if (hasCarPhoto)
-          Image.network(_getValidUrl(trip.carPhotoUrl!), fit: BoxFit.cover, errorBuilder: (c, e, s) => _buildCarPlaceholder())
+          Image.network(
+            _getValidUrl(trip.carPhotoUrl!), 
+            fit: BoxFit.cover, 
+            errorBuilder: (c, e, s) => _buildCarPlaceholder()
+          )
         else
           _buildCarPlaceholder(),
         Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.black.withOpacity(0.3), Colors.black.withOpacity(0.6)], stops: const [0.0, 0.8]))),
@@ -108,7 +112,6 @@ class DriverTripDetailsScreen extends ConsumerWidget {
   }
 
   Widget _buildRouteHeader(BuildContext context, AppLocalizations l10n) {
-    // ✅ FIXED: Safe Date Formatting (Prevents 'rw' crash)
     String formattedDate;
     try {
       final localeCode = Localizations.localeOf(context).languageCode;
@@ -181,11 +184,42 @@ class DriverTripDetailsScreen extends ConsumerWidget {
   Widget _buildPassengerCard(BookingModel booking, AppLocalizations l10n) {
     final passengerName = booking.passenger?.username ?? "Passenger #${booking.id}";
     final passengerPic = booking.passenger?.profilePicture;
+    
+    // ✅ SAFE IMAGE LOADING LOGIC
     return Container(
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: CircleAvatar(radius: 24, backgroundColor: AppTheme.primaryBlue.withOpacity(0.1), backgroundImage: passengerPic != null && passengerPic.isNotEmpty ? NetworkImage(_getValidUrl(passengerPic)) : null, child: (passengerPic == null || passengerPic.isEmpty) ? Text(passengerName.isNotEmpty ? passengerName[0].toUpperCase() : '?', style: const TextStyle(color: AppTheme.primaryBlue, fontWeight: FontWeight.bold)) : null),
+        leading: ClipOval(
+          child: SizedBox(
+            width: 48, 
+            height: 48,
+            child: (passengerPic != null && passengerPic.isNotEmpty)
+                ? Image.network(
+                    _getValidUrl(passengerPic),
+                    fit: BoxFit.cover,
+                    // If image is missing (404), show initial
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: AppTheme.primaryBlue.withOpacity(0.1),
+                        alignment: Alignment.center,
+                        child: Text(
+                          passengerName.isNotEmpty ? passengerName[0].toUpperCase() : '?',
+                          style: const TextStyle(color: AppTheme.primaryBlue, fontWeight: FontWeight.bold)
+                        ),
+                      );
+                    },
+                  )
+                : Container(
+                    color: AppTheme.primaryBlue.withOpacity(0.1),
+                    alignment: Alignment.center,
+                    child: Text(
+                      passengerName.isNotEmpty ? passengerName[0].toUpperCase() : '?',
+                      style: const TextStyle(color: AppTheme.primaryBlue, fontWeight: FontWeight.bold)
+                    ),
+                  ),
+          ),
+        ),
         title: Text(passengerName, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text("${booking.seatsBooked} ${l10n.seats} - ${l10n.paidStatus}", style: const TextStyle(color: Colors.grey, fontSize: 13)),
         trailing: IconButton(icon: const Icon(Icons.phone, color: Colors.green), onPressed: () {}),
@@ -197,8 +231,14 @@ class DriverTripDetailsScreen extends ConsumerWidget {
     showDialog(context: context, builder: (ctx) => AlertDialog(title: Text(l10n.cancelTripTitle), content: Text(l10n.cancelTripMessage), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l10n.keepTrip)), ElevatedButton(onPressed: () { Navigator.pop(ctx); Navigator.pop(context); }, style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white), child: Text(l10n.yesCancel))]));
   }
 
+  // ✅ UPDATED URL VALIDATOR (Forces HTTPS)
   String _getValidUrl(String url) {
-    if (url.startsWith('http')) return url;
+    if (url.startsWith('http')) {
+      if (url.contains('127.0.0.1') || url.contains('localhost')) {
+        return url;
+      }
+      return url.replaceFirst('http://', 'https://');
+    }
     return url.startsWith('/') ? "http://127.0.0.1:8000$url" : "http://127.0.0.1:8000/$url";
   }
 }

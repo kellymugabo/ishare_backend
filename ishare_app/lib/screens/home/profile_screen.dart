@@ -11,6 +11,7 @@ import '../profile/edit_profile_screen.dart';
 import 'safety_screen.dart';
 import 'contact_us_screen.dart';
 import 'about_screen.dart';
+import 'subscription_screen.dart';
 
 // 👇 1. IMPORT YOUR REQUESTS SCREEN
 import '../driver_requests_screen.dart';

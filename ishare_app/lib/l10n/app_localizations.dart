@@ -2025,6 +2025,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Edit Profile'**
   String get editProfile;
+
+  /// No description provided for @paymentPhoneNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment Phone Number'**
+  String get paymentPhoneNumber;
+
+  /// No description provided for @paymentInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Please send the subscription amount to this phone number via Mobile Money (MTN/Airtel). After payment, your subscription will be activated automatically.'**
+  String get paymentInstructions;
+
+  /// No description provided for @subscriptionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription'**
+  String get subscriptionTitle;
+
+  /// No description provided for @subscriptionStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription Status'**
+  String get subscriptionStatus;
+
+  /// No description provided for @trialPeriod.
+  ///
+  /// In en, this message translates to:
+  /// **'Trial Period'**
+  String get trialPeriod;
+
+  /// No description provided for @activeSubscription.
+  ///
+  /// In en, this message translates to:
+  /// **'Active Subscription'**
+  String get activeSubscription;
+
+  /// No description provided for @subscriptionExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription Expired'**
+  String get subscriptionExpired;
+
+  /// No description provided for @daysRemaining.
+  ///
+  /// In en, this message translates to:
+  /// **'{days} days remaining'**
+  String daysRemaining(int days);
+
+  /// No description provided for @pleaseRenewSubscription.
+  ///
+  /// In en, this message translates to:
+  /// **'Please renew to continue using iShare'**
+  String get pleaseRenewSubscription;
+
+  /// No description provided for @subscriptionPlans.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription Plans'**
+  String get subscriptionPlans;
+
+  /// No description provided for @perMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'per month'**
+  String get perMonth;
+
+  /// No description provided for @renewSubscription.
+  ///
+  /// In en, this message translates to:
+  /// **'Renew Subscription'**
+  String get renewSubscription;
+
+  /// No description provided for @subscribeNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscribe Now'**
+  String get subscribeNow;
+
+  /// No description provided for @payAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Pay {amount} RWF'**
+  String payAmount(String amount);
+
+  /// No description provided for @trialEndsIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Your trial ends in {days} days. Subscribe now to continue using iShare after the trial.'**
+  String trialEndsIn(int days);
+
+  /// No description provided for @paymentViaMobileMoney.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment via Mobile Money (MTN/Airtel)'**
+  String get paymentViaMobileMoney;
+
+  /// No description provided for @passengerLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Passenger'**
+  String get passengerLabel;
 }
 
 class _AppLocalizationsDelegate

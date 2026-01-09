@@ -1,5 +1,7 @@
 import random 
+from datetime import timedelta
 from rest_framework import viewsets, status, permissions, generics, views
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
@@ -13,12 +15,12 @@ from django.core.exceptions import ValidationError # ✅ Added for logic checks
 
 from .models import (
     UserProfile, Trip, Booking, Rating, PaymentTransaction,
-    DriverVerification, VerificationStatus
+    DriverVerification, VerificationStatus, Subscription
 )
 from .serializers import (
     UserSerializer, RegisterSerializer, UserProfileSerializer,
     TripSerializer, BookingSerializer, RatingSerializer,
-    PaymentSerializer, DriverVerificationSerializer
+    PaymentSerializer, DriverVerificationSerializer, SubscriptionSerializer
 )
 from .utils import PaypackPayment 
 from .emails import send_booking_confirmation, send_welcome_email, send_otp_email
@@ -31,15 +33,34 @@ User = get_user_model()
 
 class RegisterViewSet(viewsets.ViewSet):
     permission_classes = [AllowAny]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def create(self, request):
-        serializer = RegisterSerializer(data=request.data)
+        serializer = RegisterSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             user = serializer.save()
+            
+            # ✅ Create subscription with 1 month trial
+            Subscription.objects.create(
+                user=user,
+                status='trial',
+                trial_ends_at=timezone.now() + timedelta(days=30)
+            )
+            
             # ✅ Send Welcome Email
             send_welcome_email(user)
+            
+            # ✅ Get profile with vehicle_photo included
+            from .serializers import UserProfileSerializer
+            profile = user.profile
+            profile_data = UserProfileSerializer(profile, context={'request': request}).data
+            
             return Response(
-                {"message": "Registration successful.", "user": UserSerializer(user).data},
+                {
+                    "message": "Registration successful.", 
+                    "user": UserSerializer(user).data,
+                    "profile": profile_data  # ✅ Include profile with vehicle_photo
+                },
                 status=status.HTTP_201_CREATED
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -48,9 +69,18 @@ class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = RegisterSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def perform_create(self, serializer):
         user = serializer.save()
+        
+        # ✅ Create subscription with 1 month trial
+        Subscription.objects.create(
+            user=user,
+            status='trial',
+            trial_ends_at=timezone.now() + timedelta(days=30)
+        )
+        
         send_welcome_email(user)
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -157,8 +187,10 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             profile, data=request.data, partial=True, context={'request': request}
         )
         if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
+            updated_profile = serializer.save()
+            # ✅ Return the updated profile with absolute URLs
+            response_serializer = self.get_serializer(updated_profile, context={'request': request})
+            return Response(response_serializer.data)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -169,7 +201,8 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             return Response({'error': 'User ID required'}, status=400)
             
         profile = get_object_or_404(UserProfile, user_id=user_id)
-        serializer = self.get_serializer(profile)
+        # ✅ Ensure request context is passed for absolute URLs
+        serializer = self.get_serializer(profile, context={'request': request})
         return Response(serializer.data)
 
 # =====================================================
@@ -219,6 +252,23 @@ class TripViewSet(viewsets.ModelViewSet):
     
     def create(self, request, *args, **kwargs):
         try:
+            # ✅ Check subscription status before allowing trip creation
+            subscription, _ = Subscription.objects.get_or_create(
+                user=request.user,
+                defaults={
+                    'status': 'trial',
+                    'trial_ends_at': timezone.now() + timedelta(days=30)
+                }
+            )
+            
+            if not subscription.is_active():
+                return Response({
+                    'error': 'Your subscription has expired. Please renew your subscription to create trips.',
+                    'subscription_status': subscription.status,
+                    'days_remaining': subscription.get_days_remaining(),
+                    'subscription_price': subscription.get_subscription_price()
+                }, status=status.HTTP_403_FORBIDDEN)
+            
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             self.perform_create(serializer)
@@ -248,6 +298,45 @@ class BookingViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(trip_id=trip_id)
             
         return queryset
+
+    def create(self, request, *args, **kwargs):
+        try:
+            # ✅ Validate trip_id is present in request
+            if 'trip_id' not in request.data and 'trip' not in request.data:
+                return Response(
+                    {'trip_id': ['This field is required.']},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # ✅ Check subscription status before allowing booking
+            subscription, _ = Subscription.objects.get_or_create(
+                user=request.user,
+                defaults={
+                    'status': 'trial',
+                    'trial_ends_at': timezone.now() + timedelta(days=30)
+                }
+            )
+            
+            if not subscription.is_active():
+                return Response({
+                    'error': 'Your subscription has expired. Please renew your subscription to book trips.',
+                    'subscription_status': subscription.status,
+                    'days_remaining': subscription.get_days_remaining(),
+                    'subscription_price': subscription.get_subscription_price()
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # ✅ Pass request context to serializer
+            serializer = self.get_serializer(data=request.data, context={'request': request})
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+            headers = self.get_success_headers(serializer.data)
+            return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        except ValidationError as e:
+            return Response(e.message_dict if hasattr(e, 'message_dict') else {'detail': e.messages}, status=status.HTTP_400_BAD_REQUEST)
+        except DRFValidationError as e:
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     # 1. CREATE LOGIC: Validation + Math + Email
     def perform_create(self, serializer):
@@ -344,15 +433,6 @@ class BookingViewSet(viewsets.ModelViewSet):
         trip.save()
         
         return Response({'message': 'Booking rejected and seats restored.', 'status': booking.status})
-
-    def create(self, request, *args, **kwargs):
-        try:
-            return super().create(request, *args, **kwargs)
-        except ValidationError as e:
-            # Handle Django validation errors clearly
-            return Response(e.message_dict if hasattr(e, 'message_dict') else {'detail': e.messages}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 # =====================================================
 #  RATINGS
@@ -599,3 +679,102 @@ def verification_statistics(request):
         'rejected': DriverVerification.objects.filter(status=VerificationStatus.REJECTED).count(),
     }
     return Response(stats)
+
+
+# =====================================================
+# SUBSCRIPTION MANAGEMENT
+# =====================================================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_subscription_status(request):
+    """Get current user's subscription status"""
+    try:
+        subscription, created = Subscription.objects.get_or_create(
+            user=request.user,
+            defaults={
+                'status': 'trial',
+                'trial_ends_at': timezone.now() + timedelta(days=30)
+            }
+        )
+        
+        # If newly created, set trial end date
+        if created and not subscription.trial_ends_at:
+            subscription.trial_ends_at = subscription.trial_started_at + timedelta(days=30)
+            subscription.save()
+        
+        serializer = SubscriptionSerializer(subscription)
+        return Response(serializer.data)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def process_subscription_payment(request):
+    """Process subscription payment"""
+    try:
+        subscription = Subscription.objects.get(user=request.user)
+        
+        # Get payment details from request
+        phone_number = request.data.get('phone_number')
+        payment_method = request.data.get('payment_method', 'mobile_money')
+        
+        if not phone_number:
+            return Response({'error': 'Phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get subscription price based on role
+        price = subscription.get_subscription_price()
+        
+        # Simulate payment (you can integrate with actual payment gateway here)
+        # For now, we'll just mark it as paid
+        subscription.status = 'active'
+        subscription.amount_paid = price
+        subscription.payment_method = payment_method
+        subscription.payment_transaction_id = f"SUB-{subscription.id}-{int(timezone.now().timestamp())}"
+        subscription.last_payment_date = timezone.now()
+        subscription.subscription_started_at = timezone.now()
+        subscription.subscription_ends_at = timezone.now() + timedelta(days=30)  # 1 month subscription
+        subscription.save()
+        
+        serializer = SubscriptionSerializer(subscription)
+        return Response({
+            'message': 'Subscription activated successfully',
+            'subscription': serializer.data
+        }, status=status.HTTP_200_OK)
+        
+    except Subscription.DoesNotExist:
+        return Response({'error': 'Subscription not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_subscription_access(request):
+    """Check if user has active subscription (trial or paid)"""
+    try:
+        subscription, created = Subscription.objects.get_or_create(
+            user=request.user,
+            defaults={
+                'status': 'trial',
+                'trial_ends_at': timezone.now() + timedelta(days=30)
+            }
+        )
+        
+        if created and not subscription.trial_ends_at:
+            subscription.trial_ends_at = subscription.trial_started_at + timedelta(days=30)
+            subscription.save()
+        
+        is_active = subscription.is_active()
+        days_remaining = subscription.get_days_remaining()
+        
+        return Response({
+            'has_access': is_active,
+            'days_remaining': days_remaining,
+            'status': subscription.status,
+            'subscription_price': subscription.get_subscription_price(),
+            'user_role': request.user.profile.role if hasattr(request.user, 'profile') else 'passenger'
+        })
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

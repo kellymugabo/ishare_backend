@@ -33,7 +33,12 @@ from .views import (
     get_verification_details,
     list_all_verifications,
     bulk_approve_verifications,
-    verification_statistics
+    verification_statistics,
+    
+    # Subscription Views
+    get_subscription_status,
+    process_subscription_payment,
+    check_subscription_access
 )
 
 # =====================================================
@@ -80,6 +85,11 @@ urlpatterns = [
     path('admin/verifications/<int:verification_id>/', get_verification_details, name='get_verification_details'),
     path('admin/verifications/bulk-approve/', bulk_approve_verifications, name='bulk_approve_verifications'),
     path('admin/verifications/stats/', verification_statistics, name='verification_statistics'),
+
+    # Subscription Management
+    path('subscription/status/', get_subscription_status, name='subscription_status'),
+    path('subscription/pay/', process_subscription_payment, name='subscription_payment'),
+    path('subscription/check/', check_subscription_access, name='check_subscription_access'),
 
     # ==================================
     # 4. ROUTER ENDPOINTS (Catch-all last)

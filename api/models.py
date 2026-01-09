@@ -1,7 +1,9 @@
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.validators import RegexValidator
-from django.core.exceptions import ValidationError 
+from django.core.exceptions import ValidationError
+from django.utils import timezone
+from datetime import timedelta
 
 User = get_user_model()
 
@@ -168,3 +170,89 @@ class PaymentTransaction(models.Model):
 
     def __str__(self):
         return f"Payment {self.id} - {self.amount} RWF - {self.status}"
+
+
+class Subscription(models.Model):
+    """Subscription model for trial and paid subscriptions"""
+    SUBSCRIPTION_STATUS_CHOICES = (
+        ('trial', 'Trial'),
+        ('active', 'Active'),
+        ('expired', 'Expired'),
+        ('cancelled', 'Cancelled'),
+    )
+    
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='subscription')
+    status = models.CharField(max_length=20, choices=SUBSCRIPTION_STATUS_CHOICES, default='trial')
+    
+    # Trial period (1 month from registration)
+    trial_started_at = models.DateTimeField(auto_now_add=True)
+    trial_ends_at = models.DateTimeField(null=True, blank=True)
+    
+    # Paid subscription
+    subscription_started_at = models.DateTimeField(null=True, blank=True)
+    subscription_ends_at = models.DateTimeField(null=True, blank=True)
+    
+    # Payment info
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    payment_method = models.CharField(max_length=50, null=True, blank=True)
+    payment_transaction_id = models.CharField(max_length=255, null=True, blank=True)
+    last_payment_date = models.DateTimeField(null=True, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Subscription for {self.user.username} - {self.status}"
+    
+    def is_active(self):
+        """Check if subscription is currently active (trial or paid)"""
+        now = timezone.now()
+        
+        if self.status == 'trial':
+            if self.trial_ends_at:
+                return now < self.trial_ends_at
+            # If no trial_ends_at set, calculate 1 month from trial_started_at
+            trial_end = self.trial_started_at + timedelta(days=30)
+            return now < trial_end
+        
+        if self.status == 'active':
+            if self.subscription_ends_at:
+                return now < self.subscription_ends_at
+            return True
+        
+        return False
+    
+    def get_days_remaining(self):
+        """Get days remaining in trial or subscription"""
+        now = timezone.now()
+        
+        if self.status == 'trial':
+            if self.trial_ends_at:
+                end_date = self.trial_ends_at
+            else:
+                end_date = self.trial_started_at + timedelta(days=30)
+            
+            if now >= end_date:
+                return 0
+            return (end_date - now).days
+        
+        if self.status == 'active' and self.subscription_ends_at:
+            if now >= self.subscription_ends_at:
+                return 0
+            return (self.subscription_ends_at - now).days
+        
+        return 0
+    
+    def get_subscription_price(self):
+        """Get subscription price based on user role"""
+        try:
+            profile = self.user.profile
+            if profile.role == 'driver':
+                return 10000  # 10,000 RWF for drivers
+            else:
+                return 5000   # 5,000 RWF for passengers
+        except:
+            return 5000  # Default to passenger price
