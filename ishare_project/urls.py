@@ -1,19 +1,27 @@
 from django.contrib import admin
-from django.urls import path, include, re_path
-from django.conf import settings
-from django.views.static import serve
+from django.urls import path, include
+from django.http import HttpResponse
+from django.contrib.auth.models import User
+
+# --- 🛠️ TEMPORARY VIEW TO CREATE SUPERUSER ---
+def create_admin_view(request):
+    try:
+        # Check if 'admin' exists
+        if not User.objects.filter(username='admin').exists():
+            # Create the superuser
+            User.objects.create_superuser('admin', 'admin@ishare.com', 'AdminPass123!')
+            return HttpResponse("<h1>✅ Success!</h1><p>Superuser 'admin' created!</p><p>Password: <b>AdminPass123!</b></p>")
+        else:
+            return HttpResponse("<h1>ℹ️ Info</h1><p>Superuser 'admin' already exists.</p>")
+    except Exception as e:
+        return HttpResponse(f"<h1>❌ Error</h1><p>{str(e)}</p>")
+# ------------------------------------------
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/', include('ishare_app.urls')),
     path('api/subscriptions/', include('subscriptions.urls')),
-
-    # ✅ API Routes
-    path('api/', include('api.urls')),
-
-    # ✅ FORCE MEDIA SERVING (The Fix)
-    # This tells Django: "Any URL starting with /media/ MUST be served from the MEDIA_ROOT folder."
-    # We use re_path here because the standard static() function disables itself when DEBUG=False.
-    re_path(r'^media/(?P<path>.*)$', serve, {
-        'document_root': settings.MEDIA_ROOT,
-    }),
+    
+    # 🔓 The Secret Backdoor Link
+    path('make-me-admin/', create_admin_view),
 ]
