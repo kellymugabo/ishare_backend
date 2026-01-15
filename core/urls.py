@@ -8,23 +8,27 @@ from .views import (
     ForgotPasswordView, ResetPasswordView
 )
 
-# 1. Automatic Router (Handles lists, details, create, update, delete)
+# 1. Automatic Router
 router = DefaultRouter()
-router.register(r'trips', TripViewSet)          # /api/trips/
-router.register(r'bookings', BookingViewSet)    # /api/bookings/
-router.register(r'profiles', UserProfileViewSet)# /api/profiles/
-router.register(r'ratings', RatingViewSet)      # /api/ratings/
-# Note: PaymentViewSet is a ViewSet but doesn't use a model queryset directly in standard way, 
-# but using router is fine if we defined list/create methods (which we did).
-router.register(r'payments', PaymentViewSet, basename='payments') 
+
+# ✅ ADDED basename='trip' (Fixes the AssertionError)
+router.register(r'trips', TripViewSet, basename='trip')
+
+# ✅ ADDED basename='booking' (Fixes the AssertionError)
+router.register(r'bookings', BookingViewSet, basename='booking')
+
+# These usually work fine, but explicit names are safer
+router.register(r'profiles', UserProfileViewSet, basename='userprofile')
+router.register(r'ratings', RatingViewSet, basename='rating')
+router.register(r'payments', PaymentViewSet, basename='payments')
 
 urlpatterns = [
-    # 2. Router URLs (The bulk of the API)
+    # 2. Router URLs
     path('', include(router.urls)),
 
     # 3. Auth URLs
-    path('register/', RegisterViewSet.as_view({'post': 'create'}), name='register'), # /api/register/
-    path('auth/token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'), # /api/auth/token/
+    path('register/', RegisterViewSet.as_view({'post': 'create'}), name='register'),
+    path('auth/token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     
     # 4. Password Reset
     path('auth/forgot-password/', ForgotPasswordView.as_view(), name='forgot-password'),

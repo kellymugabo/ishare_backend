@@ -52,7 +52,6 @@ class DriverVerificationSerializer(serializers.ModelSerializer):
         return clean_id
 
     def validate_phone_number(self, value):
-        # Clean and format phone number
         clean = re.sub(r'[^\d+]', '', value)
         if clean.startswith('+250'):
             clean = '0' + clean[4:]
@@ -70,7 +69,6 @@ class DriverVerificationSerializer(serializers.ModelSerializer):
             status=VerificationStatus.APPROVED
         ).exclude(user=user).exists():
             raise serializers.ValidationError('This phone number is already registered.')
-            
         return formatted
 
     def create(self, validated_data):
@@ -89,6 +87,81 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_is_verified(self, obj):
         return hasattr(obj, 'driver_verification') and obj.driver_verification.status == 'APPROVED'
+
+
+# ✅ ADDED MISSING REGISTER SERIALIZER HERE
+class RegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, style={'input_type': 'password'})
+    password2 = serializers.CharField(write_only=True, style={'input_type': 'password'})
+    
+    role = serializers.CharField(required=False, default='passenger')
+    vehicle_model = serializers.CharField(required=False, allow_blank=True)
+    plate_number = serializers.CharField(required=False, allow_blank=True)
+    vehicle_photo = serializers.ImageField(required=False)
+
+    class Meta:
+        model = User
+        fields = [
+            'username', 'email', 'password', 'password2',
+            'first_name', 'last_name',
+            'role', 'vehicle_model', 'plate_number', 'vehicle_photo'
+        ]
+
+    def validate_password(self, value):
+        if len(value) < 8:
+            raise serializers.ValidationError("Password must be at least 8 characters long.")
+        if not re.search(r'\d', value):
+            raise serializers.ValidationError("Password must contain at least one number.")
+        return value
+
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("This email address is already registered.")
+        return value
+
+    def validate(self, data):
+        if data.get('password') != data.get('password2'):
+            raise serializers.ValidationError({"password": "Passwords must match."})
+
+        role = data.get('role', 'passenger')
+        plate = data.get('plate_number')
+
+        if role == 'driver':
+            if not plate:
+                raise serializers.ValidationError({"plate_number": "Drivers must provide a plate number."})
+            if UserProfile.objects.filter(vehicle_plate_number=plate).exists():
+                raise serializers.ValidationError({"plate_number": "This vehicle plate number is already registered."})
+        return data
+
+    def create(self, validated_data):
+        role = validated_data.pop('role', 'passenger')
+        vehicle_model = validated_data.pop('vehicle_model', None)
+        plate_number = validated_data.pop('plate_number', None)
+        vehicle_photo = validated_data.pop('vehicle_photo', None)
+        validated_data.pop('password2')
+
+        if not vehicle_photo and self.context.get('request'):
+            vehicle_photo = self.context['request'].FILES.get('vehicle_photo')
+
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data.get('email', ''),
+            password=validated_data['password'],
+            first_name=validated_data.get('first_name', ''),
+            last_name=validated_data.get('last_name', '')
+        )
+
+        profile, created = UserProfile.objects.get_or_create(user=user)
+        profile.role = role
+        if role == 'driver':
+            if vehicle_model: profile.vehicle_model = vehicle_model
+            if plate_number: profile.vehicle_plate_number = plate_number
+            if vehicle_photo: profile.vehicle_photo = vehicle_photo
+        elif vehicle_photo:
+            profile.vehicle_photo = vehicle_photo
+        
+        profile.save()
+        return user
 
 
 # -------------------- REVIEWS (HELPER) --------------------
@@ -141,12 +214,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
         representation = super().to_representation(instance)
         request = self.context.get('request')
         
-        # Build Absolute URL Helper
         def build_absolute_url(url_path):
             if not url_path: return None
             url_str = str(url_path)
-            
-            # Use request to build absolute URI
             if request:
                 return request.build_absolute_uri(url_str)
             return url_str
@@ -167,7 +237,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
         if 'last_name' in validated_data: user_data['last_name'] = validated_data.pop('last_name')
         if 'email' in validated_data: user_data['email'] = validated_data.pop('email')
         
-        # Handle Files from Request
         vehicle_photo = None
         if 'vehicle_photo' in validated_data:
             vehicle_photo = validated_data['vehicle_photo']
