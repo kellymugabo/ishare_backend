@@ -4,17 +4,33 @@ from django.utils import timezone
 from datetime import timedelta
 
 class SubscriptionPlan(models.Model):
-    name = models.CharField(max_length=100)       # e.g., "Monthly Pro"
-    price = models.DecimalField(max_digits=10, decimal_places=2) # e.g., 5000.00
-    duration_days = models.IntegerField()         # e.g., 30
-    description = models.TextField(blank=True)    # e.g., "Access to all rides"
+    # ✅ New: Define who this plan is for
+    ROLE_CHOICES = [
+        ('driver', 'Driver'),
+        ('passenger', 'Passenger'),
+        ('all', 'All Users'),
+    ]
+
+    name = models.CharField(max_length=100)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    duration_days = models.IntegerField()
+    description = models.TextField(blank=True)
+    
+    # ✅ New Field: target_role
+    target_role = models.CharField(
+        max_length=20, 
+        choices=ROLE_CHOICES, 
+        default='all',
+        help_text="Who can see this plan?"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.name} - {self.price} RWF"
+        return f"{self.name} ({self.get_target_role_display()}) - {self.price} RWF"
 
+# ... (UserSubscription class stays exactly the same as the previous correct version) ...
 class UserSubscription(models.Model):
-    # ✅ We keep 'driver_subscription' to match your database structure
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, 
         on_delete=models.CASCADE, 
@@ -26,7 +42,6 @@ class UserSubscription(models.Model):
     is_active = models.BooleanField(default=True)
 
     def save(self, *args, **kwargs):
-        # Automatically set end_date if it's missing
         if not self.end_date and self.plan:
             self.end_date = timezone.now() + timedelta(days=self.plan.duration_days)
         super().save(*args, **kwargs)
@@ -36,7 +51,5 @@ class UserSubscription(models.Model):
         return self.is_active and self.end_date > timezone.now()
 
     def __str__(self):
-        # ✅ CRITICAL FIX: 
-        # We check if 'self.plan' exists. If it is None, we print "No Plan" instead of crashing.
         plan_name = self.plan.name if self.plan else "No Plan"
         return f"{self.user.username} - {plan_name}"

@@ -3,23 +3,35 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from django.utils import timezone
 from datetime import timedelta
+from django.db.models import Q
 from .models import SubscriptionPlan, UserSubscription
 from .serializers import SubscriptionPlanSerializer, UserSubscriptionSerializer
 
-# 1. List all available plans
+# 1. List available plans (AUTOMATIC FILTERING)
 @api_view(['GET'])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated]) # ✅ Changed to IsAuthenticated to check user role
 def get_plans(request):
-    plans = SubscriptionPlan.objects.all()
-    serializer = SubscriptionPlanSerializer(plans, many=True)
-    return Response(serializer.data)
+    try:
+        # 1. Detect User Role automatically
+        user_role = request.user.profile.role # 'driver' or 'passenger'
 
-# 2. Get My Current Subscription Status (FIXED TO STOP CRASHING)
+        # 2. Filter plans automatically
+        # Show plans meant for THIS role OR plans meant for 'all' (like free trial)
+        plans = SubscriptionPlan.objects.filter(
+            Q(target_role=user_role) | Q(target_role='all')
+        )
+        
+        serializer = SubscriptionPlanSerializer(plans, many=True)
+        return Response(serializer.data)
+        
+    except Exception as e:
+        # Fallback if something is wrong with profile
+        return Response({"error": str(e)}, status=400)
+
+# 2. Get My Current Subscription Status
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_my_subscription(request):
-    # Use filter().first() instead of request.user.subscription
-    # This returns None instead of crashing if no subscription exists
     sub = UserSubscription.objects.filter(user=request.user).first()
     
     if sub:
