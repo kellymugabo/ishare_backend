@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart'; 
-// 🌍 LOCALIZATION IMPORT
 import 'package:ishare_app/l10n/app_localizations.dart';
 
 import '../../constants/app_theme.dart';
 import '../../services/api_service.dart';
 
-// Payment Method Enum
 enum PaymentMethod {
   mobileMoney,
   card,
@@ -17,11 +15,13 @@ enum PaymentMethod {
 class PaymentScreen extends ConsumerStatefulWidget {
   final double totalAmount;
   final int bookingId; // If -1, this is a SUBSCRIPTION payment.
+  final int? planId;   // ✅ REQUIRED for Subscriptions
 
   const PaymentScreen({
     super.key, 
     required this.totalAmount,
     required this.bookingId,
+    this.planId, // Nullable, but needed if bookingId == -1
   });
 
   @override
@@ -31,16 +31,18 @@ class PaymentScreen extends ConsumerStatefulWidget {
 class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   bool _isProcessing = false;
   PaymentMethod _selectedMethod = PaymentMethod.mobileMoney;
+  
   final _phoneController = TextEditingController();
+  final _transactionIdController = TextEditingController(); // ✅ NEW: Required for Admin
   final _formKey = GlobalKey<FormState>();
 
   @override
   void dispose() {
     _phoneController.dispose();
+    _transactionIdController.dispose();
     super.dispose();
   }
 
-  // 🛠 HELPER: Format Currency for RWF (e.g., 5000 -> 5,000)
   String formatRWF(double amount) {
     int value = amount.toInt();
     return value.toString().replaceAllMapped(
@@ -49,11 +51,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     );
   }
 
-  // 🔄 MAIN PAYMENT HANDLER
   Future<void> _initiatePayment() async {
     final l10n = AppLocalizations.of(context)!;
 
-    // Validate phone number only if Mobile Money is selected
     if (_selectedMethod == PaymentMethod.mobileMoney) {
        if (!_formKey.currentState!.validate()) {
          return;
@@ -86,12 +86,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           }
         }
 
-        if (serverMessage.contains("Payment already exists")) {
+        if (serverMessage.contains("Payment already exists") || serverMessage.contains("transaction ID")) {
           _showPaymentAlreadyExistsDialog(l10n);
-        } else if (serverMessage.contains("You cannot book your own trip")) {
-          _showPaymentError(l10n, "You cannot book your own trip.");
         } else {
-          _showPaymentError(l10n, serverMessage.isNotEmpty ? serverMessage : e.message ?? "Unknown Error");
+          _showPaymentError(l10n, serverMessage.isNotEmpty ? serverMessage : "Connection Error");
         }
       }
     } catch (e) {
@@ -100,151 +98,46 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         _showPaymentError(l10n, e.toString());
       }
     } finally {
-      // Safety check to ensure loader is off if method didn't handle it
       if (mounted && _selectedMethod != PaymentMethod.mobileMoney) {
         setState(() => _isProcessing = false);
       }
     }
   }
 
-  // --- 1. MOBILE MONEY LOGIC (SMART DUAL MODE) ---
+  // --- 1. MOBILE MONEY LOGIC (MERGED) ---
   Future<void> _processMobileMoneyPayment(AppLocalizations l10n) async {
-    setState(() => _isProcessing = true);
-    
-    final apiService = ref.read(apiServiceProvider);
-    String targetPhone = "";
-    String titleText = "";
-    String subtitleText = "";
-    
-    try {
-      // ---------------------------------------------------------
-      // CASE A: SUBSCRIPTION PAYMENT (Booking ID is -1)
-      // ---------------------------------------------------------
-      if (widget.bookingId == -1) {
-        targetPhone = "0788 123 456"; // REPLACE WITH YOUR COMPANY PHONE
-        titleText = "Pay to ISHARE";
-        subtitleText = "ISHARE Company Number";
-        
-        // No need to fetch booking details, so we stop loading immediately to show dialog
-        if (mounted) setState(() => _isProcessing = false);
-      } 
-      
-      // ---------------------------------------------------------
-      // CASE B: RIDE PAYMENT (Booking ID is normal)
-      // ---------------------------------------------------------
-      else {
-        // Fetch Booking Details to find Driver's Phone Number
-        final bookings = await apiService.fetchMyBookings();
-        
-        final currentBooking = bookings.firstWhere(
-          (b) => b.id == widget.bookingId,
-          orElse: () => throw Exception("Booking not found"),
-        );
-        
-        // Extract Driver's Phone from the Trip model
-        targetPhone = currentBooking.trip?.driverPhone ?? "07XX XXX XXX";
-        titleText = "Pay to Driver";
-        subtitleText = "Driver's Number";
+    // 1. Show Instructions Dialog First (So they know where to pay)
+    final userConfirmed = await _showInstructionDialog();
 
-        // Stop loading so we can show the dialog
-        if (mounted) setState(() => _isProcessing = false);
-      }
+    if (userConfirmed == true) {
+      setState(() => _isProcessing = true);
+      final apiService = ref.read(apiServiceProvider);
 
-      // ---------------------------------------------------------
-      // SHOW THE DIALOG (Shared for both)
-      // ---------------------------------------------------------
-      final userConfirmed = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: [
-              const Icon(Icons.phone_android, color: AppTheme.primaryBlue),
-              const SizedBox(width: 10),
-              Text(titleText, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text("Please send mobile money to this number:"),
-              const SizedBox(height: 15),
-              Container(
-                padding: const EdgeInsets.all(15),
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.grey[300]!),
-                ),
-                child: Column(
-                  children: [
-                    SelectableText( // Allows user to copy the number
-                      targetPhone, 
-                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: AppTheme.primaryBlue)
-                    ),
-                    const SizedBox(height: 5),
-                    Text(subtitleText, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              
-              Text(
-                "Amount: ${formatRWF(widget.totalAmount)} RWF", 
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
-              ),
-              
-              const SizedBox(height: 10),
-              const Divider(),
-              const SizedBox(height: 10),
-              const Text(
-                "1. Dial *182# or use your SIM Toolkit.\n2. Send the exact amount to the number above.\n3. Come back here and click 'I have Paid'.",
-                style: TextStyle(fontSize: 13, height: 1.5, color: AppTheme.textDark),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false), // Cancel
-              child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true), // Confirm
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green, 
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
-              ),
-              child: const Text("I have Paid"),
-            ),
-          ],
-        ),
-      );
-
-      // ---------------------------------------------------------
-      // HANDLE CONFIRMATION
-      // ---------------------------------------------------------
-      if (userConfirmed == true) {
-        if (mounted) setState(() => _isProcessing = true);
-        
-        // IF SUBSCRIPTION: 
+      try {
+        // ---------------------------------------------------------
+        // CASE A: SUBSCRIPTION PAYMENT (Real Backend Call)
+        // ---------------------------------------------------------
         if (widget.bookingId == -1) {
-           // TODO: Call the real Subscribe API here in the next step
-           // For now, we simulate success
-           await Future.delayed(const Duration(seconds: 1));
+           if (widget.planId == null) throw Exception("Plan ID is missing");
+
+           // ✅ CALL THE NEW API ENDPOINT
+           await apiService.submitSubscriptionPayment(
+             widget.planId!, 
+             _transactionIdController.text.trim()
+           );
+
            if (mounted) {
-              _showPaymentSuccess(l10n, "SUB-${DateTime.now().millisecondsSinceEpoch}");
+             _showPaymentSuccess(l10n, _transactionIdController.text.trim());
            }
         } 
-        // IF RIDE:
+        // ---------------------------------------------------------
+        // CASE B: RIDE PAYMENT (Simulation)
+        // ---------------------------------------------------------
         else {
           final response = await apiService.simulatePayment(
             bookingId: widget.bookingId,
             amount: widget.totalAmount,
-            phoneNumber: _phoneController.text, // Just for record keeping
+            phoneNumber: _phoneController.text,
           );
 
           final transactionId = response['transaction_id'] ?? "MANUAL-CONFIRM";
@@ -253,13 +146,57 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
              _showPaymentSuccess(l10n, transactionId);
           }
         }
+      } catch (e) {
+        rethrow;
+      } finally {
+        if (mounted) setState(() => _isProcessing = false);
       }
-
-    } catch (e) {
-      if (mounted) _showPaymentError(l10n, e.toString());
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
     }
+  }
+
+  Future<bool?> _showInstructionDialog() async {
+    String targetPhone = "0788 123 456"; 
+    String titleText = "Pay to ISHARE";
+    
+    // Logic to change phone number if paying a driver directly
+    if (widget.bookingId != -1) {
+       titleText = "Pay to Driver"; 
+       // You would fetch driver phone here if needed, or keep generic company phone
+    }
+
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(titleText, style: const TextStyle(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("1. Dial *182#"),
+            const SizedBox(height: 5),
+            Text("2. Send ${formatRWF(widget.totalAmount)} RWF to:", style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 5),
+            SelectableText(
+              targetPhone,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
+            ),
+            const SizedBox(height: 15),
+            const Text("3. Copy the Transaction ID (Ref) from SMS.", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const Text("4. Paste it in the box on the previous screen.", style: TextStyle(fontSize: 13)),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+            child: const Text("I have Paid"),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _processCardPayment(AppLocalizations l10n) async {
@@ -300,47 +237,21 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           children: [
             Icon(Icons.check_circle, color: Colors.green, size: 32),
             SizedBox(width: 12),
-            Text("Payment Confirmed!", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text("Submitted!", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Different message for Subscriptions vs Rides
-            Text(
-              widget.bookingId == -1 
-                  ? "Your subscription is now active!"
-                  : "Your booking has been confirmed.", 
-              style: const TextStyle(fontSize: 15)
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(10)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("${l10n.transactionId}: $transactionId", style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                  const SizedBox(height: 4),
-                  
-                  // --- UPDATED: RWF DISPLAY ---
-                  Text(
-                    "${l10n.amount}: ${formatRWF(widget.totalAmount)} RWF", 
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppTheme.textDark)
-                  ),
-                ],
-              ),
-            ),
-          ],
+        content: Text(
+          widget.bookingId == -1 
+              ? "Your payment is under review. Your subscription will be active shortly."
+              : "Your booking has been confirmed.",
         ),
         actions: [
           TextButton(
             onPressed: () {
               Navigator.pop(context); // Close dialog
-              Navigator.pop(context, true); // Return 'true'
+              Navigator.pop(context, true); // Return to previous screen
             },
-            child: Text(l10n.done, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            child: Text(l10n.done),
           ),
         ],
       ),
@@ -348,64 +259,19 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   }
 
   void _showPaymentAlreadyExistsDialog(AppLocalizations l10n) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.info_outline, color: AppTheme.primaryBlue, size: 32),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                l10n.paymentAlreadyPaidTitle,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          l10n.paymentAlreadyPaidMsg,
-          style: const TextStyle(fontSize: 15),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context); // Close dialog
-              Navigator.pop(context, true); // Return 'true' to go to My Trips
-            },
-            child: Text(l10n.viewTrips, style: const TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
+     showDialog(
+       context: context,
+       builder: (_) => AlertDialog(
+         title: const Text("Duplicate Payment"),
+         content: const Text("This Transaction ID has already been used."),
+         actions: [TextButton(onPressed: ()=>Navigator.pop(context), child: const Text("OK"))],
+       )
+     );
   }
 
   void _showPaymentError(AppLocalizations l10n, String message) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 32),
-            const SizedBox(width: 12),
-            Text(l10n.paymentFailed),
-          ],
-        ),
-        // Clean up any remaining "Exception:" text just in case
-        content: Text(message.replaceAll("Exception:", "").trim()),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(l10n.ok),
-          ),
-        ],
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
   }
-
-  // --- 3. UI BUILD ---
 
   @override
   Widget build(BuildContext context) {
@@ -413,12 +279,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
     return Scaffold(
       backgroundColor: AppTheme.surfaceGrey,
-      appBar: AppBar(
-        title: Text(l10n.paymentTitle, style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textDark)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: AppTheme.textDark),
-      ),
+      appBar: AppBar(title: Text(l10n.paymentTitle)),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Form(
@@ -426,76 +287,81 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Amount Display
               Text(l10n.totalAmount, style: const TextStyle(fontSize: 16, color: AppTheme.textGrey)),
               const SizedBox(height: 8),
-              
-              // --- UPDATED: RWF DISPLAY ---
               Text(
                 "${formatRWF(widget.totalAmount)} RWF",
                 style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w900, color: AppTheme.primaryBlue),
               ),
-              
               const SizedBox(height: 32),
 
-              // Payment Method Selection
-              Text(
-                l10n.selectPaymentMethod,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textDark),
-              ),
+              Text(l10n.selectPaymentMethod, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
+              
+              // ✅ RESTORED: Subtitles in Options
+              _buildPaymentMethodOption(
+                PaymentMethod.mobileMoney, 
+                l10n.mobileMoney, 
+                Icons.phone_android, 
+                l10n.mobileMoneySubtitle
+              ),
+              const SizedBox(height: 12),
+              _buildPaymentMethodOption(
+                PaymentMethod.card, 
+                l10n.cardPayment, 
+                Icons.credit_card, 
+                l10n.cardSubtitle
+              ),
+              const SizedBox(height: 12),
+              _buildPaymentMethodOption(
+                PaymentMethod.bankTransfer, 
+                l10n.bankTransfer, 
+                Icons.account_balance, 
+                l10n.bankTransferSubtitle
+              ),
 
-              _buildPaymentMethodOption(
-                PaymentMethod.mobileMoney,
-                l10n.mobileMoney,
-                Icons.phone_android,
-                l10n.mobileMoneySubtitle,
-              ),
-              const SizedBox(height: 12),
-              _buildPaymentMethodOption(
-                PaymentMethod.card,
-                l10n.cardPayment,
-                Icons.credit_card,
-                l10n.cardSubtitle,
-              ),
-              const SizedBox(height: 12),
-              _buildPaymentMethodOption(
-                PaymentMethod.bankTransfer,
-                l10n.bankTransfer,
-                Icons.account_balance,
-                l10n.bankTransferSubtitle,
-              ),
               const SizedBox(height: 24),
 
-              // Phone Number Input (Only for Mobile Money)
+              // ✅ NEW: TRANSACTION ID INPUT (Crucial for Admin Approval)
               if (_selectedMethod == PaymentMethod.mobileMoney) ...[
                 TextFormField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  style: const TextStyle(color: AppTheme.textDark),
+                  controller: _transactionIdController,
+                  style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2),
                   decoration: InputDecoration(
-                    labelText: l10n.phoneNumber,
-                    hintText: l10n.phoneHint,
-                    prefixIcon: const Icon(Icons.phone, color: AppTheme.primaryBlue),
+                    labelText: "Transaction ID / Ref Number",
+                    hintText: "e.g. 8842...",
+                    prefixIcon: const Icon(Icons.receipt_long, color: AppTheme.primaryBlue),
                     filled: true,
                     fillColor: Colors.white,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.primaryBlue, width: 2)),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   validator: (value) {
-                    if (value == null || value.isEmpty) return l10n.enterPhoneError;
+                    if (value == null || value.isEmpty) return "Please enter the Transaction ID from SMS";
                     return null;
                   },
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  l10n.paymentPromptMsg,
-                  style: const TextStyle(fontSize: 12, color: AppTheme.textGrey),
+                const SizedBox(height: 12),
+                
+                // Phone Number (Optional now, mostly for records)
+                TextFormField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    labelText: l10n.phoneNumber,
+                    prefixIcon: const Icon(Icons.phone),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 8),
+                const Text(
+                  "Enter your phone number for record keeping.",
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
               ],
 
-              // Pay Button
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -503,17 +369,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                   onPressed: _isProcessing ? null : _initiatePayment,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primaryBlue,
-                    foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    elevation: 4,
-                    shadowColor: AppTheme.primaryBlue.withOpacity(0.4),
                   ),
                   child: _isProcessing
-                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : Text(
-                          l10n.payNow,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(l10n.payNow, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                 ),
               ),
             ],
@@ -523,40 +383,29 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     );
   }
 
+  // ✅ RESTORED: Subtitle parameter
   Widget _buildPaymentMethodOption(PaymentMethod method, String title, IconData icon, String subtitle) {
     final isSelected = _selectedMethod == method;
     return InkWell(
       onTap: () => setState(() => _selectedMethod = method),
-      borderRadius: BorderRadius.circular(12),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+      child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          border: Border.all(
-            color: isSelected ? AppTheme.primaryBlue : Colors.grey[200]!,
-            width: isSelected ? 2 : 1,
-          ),
+          border: Border.all(color: isSelected ? AppTheme.primaryBlue : Colors.grey[300]!, width: isSelected ? 2 : 1),
           borderRadius: BorderRadius.circular(12),
           color: isSelected ? AppTheme.primaryBlue.withOpacity(0.05) : Colors.white,
         ),
         child: Row(
           children: [
-            Icon(icon, size: 30, color: isSelected ? AppTheme.primaryBlue : Colors.grey[400]),
+            Icon(icon, color: isSelected ? AppTheme.primaryBlue : Colors.grey, size: 30),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: isSelected ? AppTheme.primaryBlue : AppTheme.textDark,
-                    ),
-                  ),
+                  Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isSelected ? AppTheme.primaryBlue : Colors.black)),
                   const SizedBox(height: 4),
-                  Text(subtitle, style: const TextStyle(fontSize: 12, color: AppTheme.textGrey)),
+                  Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ),
             ),

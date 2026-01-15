@@ -4,7 +4,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 class SubscriptionPlan(models.Model):
-    # ✅ New: Define who this plan is for
+    # ✅ Define who this plan is for
     ROLE_CHOICES = [
         ('driver', 'Driver'),
         ('passenger', 'Passenger'),
@@ -16,7 +16,7 @@ class SubscriptionPlan(models.Model):
     duration_days = models.IntegerField()
     description = models.TextField(blank=True)
     
-    # ✅ New Field: target_role
+    # ✅ Field: target_role
     target_role = models.CharField(
         max_length=20, 
         choices=ROLE_CHOICES, 
@@ -29,7 +29,6 @@ class SubscriptionPlan(models.Model):
     def __str__(self):
         return f"{self.name} ({self.get_target_role_display()}) - {self.price} RWF"
 
-# ... (UserSubscription class stays exactly the same as the previous correct version) ...
 class UserSubscription(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, 
@@ -53,3 +52,21 @@ class UserSubscription(models.Model):
     def __str__(self):
         plan_name = self.plan.name if self.plan else "No Plan"
         return f"{self.user.username} - {plan_name}"
+
+# ✅ FIX: This class must be unindented (moved to the left)
+class SubscriptionTransaction(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    plan = models.ForeignKey(SubscriptionPlan, on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    transaction_id = models.CharField(max_length=50, unique=True) # The MoMo Ref
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.amount} RWF ({self.status})"
