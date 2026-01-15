@@ -21,8 +21,11 @@ from .models import (
     DriverVerification, VerificationStatus
 )
 
-# ✅ Import Models from SUBSCRIPTIONS (The new way)
+# ✅ Import Models from SUBSCRIPTIONS
 from subscriptions.models import UserSubscription, SubscriptionPlan
+
+# ✅ Import Permissions (THE NEW SECURITY RULE)
+from .permissions import IsDriverOrReadOnly
 
 # ✅ Import Serializers
 from .serializers import (
@@ -35,7 +38,6 @@ from .serializers import (
 try:
     from .emails import send_booking_confirmation, send_otp_email
 except ImportError:
-    # Fallback if files are missing to prevent crash
     def send_booking_confirmation(user, details): print("Simulating Email: Booking Confirmed")
     def send_otp_email(email, code): print(f"Simulating Email: OTP is {code}")
 
@@ -54,9 +56,7 @@ class RegisterViewSet(viewsets.ViewSet):
         if serializer.is_valid():
             user = serializer.save()
             
-            # ⚠️ NOTE: We removed manual Subscription creation here.
-            # The 'signals.py' file in the subscriptions app now handles 
-            # creating the 30-day Free Trial automatically!
+            # NOTE: Subscription checks are handled by signals.py in subscriptions app
 
             # ✅ SEND WELCOME EMAIL
             try:
@@ -175,7 +175,6 @@ class UserProfileViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return UserProfile.objects.select_related("user").all()
 
-    # ✅ THE CRITICAL 'me' ENDPOINT
     @action(detail=False, methods=['get', 'patch'], url_path='me', url_name='me')
     def me(self, request):
         profile, created = UserProfile.objects.get_or_create(user=request.user)
@@ -195,16 +194,22 @@ class UserProfileViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 # =====================================================
-#  TRIPS
+#  TRIPS (Updated with Permissions)
 # =====================================================
 class TripViewSet(viewsets.ModelViewSet):
     serializer_class = TripSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
+    # ✅ SECURE: Only authenticated users can access, AND
+    # Only Drivers can create/edit (Passengers are Read-Only)
+    permission_classes = [IsAuthenticated, IsDriverOrReadOnly]
+
     def get_permissions(self):
+        # Allow anyone (even guests) to VIEW trips on the home screen
         if self.action in ['list', 'retrieve']:
             return [AllowAny()]
-        return [IsAuthenticated()]
+        # For everything else (create, update, delete), use the strict rules
+        return [IsAuthenticated(), IsDriverOrReadOnly()]
 
     def get_queryset(self):
         return Trip.objects.select_related('driver', 'driver__profile').all().order_by('-departure_time')
@@ -222,14 +227,12 @@ class TripViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         try:
-            # ✅ NEW SUBSCRIPTION CHECK (Using subscriptions app)
-            # Check if user has ANY active subscription (Free Trial or Premium)
+            # ✅ SUBSCRIPTION CHECK
             has_active_sub = UserSubscription.objects.filter(
                 user=request.user, 
                 is_active=True
             ).exists()
             
-            # If you want to strictly check dates:
             if not has_active_sub:
                  # Double check expiry dates just in case
                  sub = UserSubscription.objects.filter(user=request.user).order_by('-end_date').first()
@@ -247,7 +250,7 @@ class TripViewSet(viewsets.ModelViewSet):
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def perform_create(self, serializer):
-        # Optional: Update Vehicle info if provided during trip creation
+        # Optional: Update Vehicle info if provided
         new_car_name = self.request.data.get('new_car_name')
         new_car_photo = self.request.FILES.get('new_car_photo')
         if hasattr(self.request.user, 'profile'):
@@ -256,6 +259,7 @@ class TripViewSet(viewsets.ModelViewSet):
             if new_car_photo: profile.vehicle_photo = new_car_photo
             if new_car_name or new_car_photo: profile.save()
 
+        # Save with current user as driver
         serializer.save(driver=self.request.user)
 
 # =====================================================
@@ -280,7 +284,7 @@ class BookingViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         try:
-            # ✅ NEW SUBSCRIPTION CHECK
+            # ✅ SUBSCRIPTION CHECK
             has_active_sub = UserSubscription.objects.filter(
                 user=request.user, 
                 is_active=True
@@ -311,12 +315,10 @@ class BookingViewSet(viewsets.ModelViewSet):
         if Booking.objects.filter(trip=trip, passenger=self.request.user).exists():
             raise ValidationError({"detail": "You have already booked this trip."})
 
-        # Save & Deduct Seats
         booking = serializer.save(passenger=self.request.user, status='pending')
         trip.available_seats -= booking.seats_booked
         trip.save()
         
-        # Send Email
         try:
             details = {
                 'start': trip.start_location_name,
@@ -358,7 +360,6 @@ class BookingViewSet(viewsets.ModelViewSet):
         booking.status = 'cancelled'
         booking.save()
         
-        # Restore Seats
         trip = booking.trip
         trip.available_seats += booking.seats_booked
         trip.save()
