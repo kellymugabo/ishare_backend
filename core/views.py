@@ -475,3 +475,42 @@ def fix_all_profiles(request):
         "message": f"Operation Complete. Fixed {fixed_count} broken profiles.",
         "details": log
     })
+
+    # --- Add to bottom of core/views.py ---
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def force_delete_user(request, username):
+    """
+    Deletes a user by username, bypassing the Admin Panel crash.
+    Usage: /force-delete/username/
+    """
+    try:
+        # 1. Find the user
+        target_user = User.objects.get(username=username)
+        user_id = target_user.id
+        
+        # 2. Manual Cleanup (Safety First)
+        # We manually delete the subscription first to prevent signal crashes
+        if hasattr(target_user, 'driver_subscription'):
+            target_user.driver_subscription.delete()
+            
+        # 3. Delete the User
+        target_user.delete()
+        
+        return Response({
+            "status": "success", 
+            "message": f"User '{username}' (ID: {user_id}) has been permanently deleted."
+        }, status=200)
+
+    except User.DoesNotExist:
+        return Response({
+            "status": "error", 
+            "message": f"User '{username}' not found."
+        }, status=404)
+        
+    except Exception as e:
+        return Response({
+            "status": "crash", 
+            "error": str(e)
+        }, status=500)
