@@ -48,13 +48,17 @@ class UserSubscription(models.Model):
         return self.is_active and self.end_date > timezone.now()
 
     def __str__(self):
-        # ✅ FIX: Handle case where user is deleted or None
-        username = "Unknown User"
-        if self.user:
-            username = getattr(self.user, 'username', 'Unknown')
+        # ✅ CRITICAL FIX: Wrapped in try/except
+        try:
+            username = "Unknown User"
+            if self.user:
+                username = getattr(self.user, 'username', 'Unknown')
             
-        plan_name = self.plan.name if self.plan else "No Plan"
-        return f"{username} - {plan_name}"
+            plan_name = self.plan.name if self.plan else "No Plan"
+            return f"{username} - {plan_name}"
+        except Exception:
+            # If ANY error happens (like user is already deleted), return the ID safely
+            return f"Subscription {self.pk}"
 
 class SubscriptionTransaction(models.Model):
     STATUS_CHOICES = [
@@ -71,9 +75,13 @@ class SubscriptionTransaction(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        # ✅ FIX: Handle case where user is deleted
-        username = "Unknown"
-        if self.user:
-            username = getattr(self.user, 'username', 'Unknown')
+        # ✅ CRITICAL FIX: Wrapped in try/except
+        try:
+            username = "Unknown"
+            if self.user:
+                username = getattr(self.user, 'username', 'Unknown')
             
-        return f"{username} - {self.amount} RWF ({self.status})"
+            return f"{username} - {self.amount} RWF ({self.status})"
+        except Exception:
+            # If ANY error happens, return ID safely
+            return f"Transaction {self.pk}"
