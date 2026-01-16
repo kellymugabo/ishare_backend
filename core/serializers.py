@@ -86,10 +86,10 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_verified']
 
     def get_is_verified(self, obj):
+        # Checks if the driver is verified
         return hasattr(obj, 'driver_verification') and obj.driver_verification.status == 'APPROVED'
 
 
-# ✅ ADDED MISSING REGISTER SERIALIZER HERE
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, style={'input_type': 'password'})
     password2 = serializers.CharField(write_only=True, style={'input_type': 'password'})
@@ -266,13 +266,16 @@ class UserProfileSerializer(serializers.ModelSerializer):
         return instance
 
 
-# -------------------- TRIPS --------------------
+# -------------------- TRIPS (UPDATED TO FIX 500 ERROR) --------------------
 class TripSerializer(serializers.ModelSerializer):
     driver = UserSerializer(read_only=True)
     driver_name = serializers.SerializerMethodField()
     driver_phone = serializers.CharField(source='driver.profile.phone_number', read_only=True)
     driver_rating = serializers.SerializerMethodField()
     
+    # ✅ FIX: Added this field safely so the frontend knows if driver is subscribed
+    is_subscription_active = serializers.SerializerMethodField()
+
     car_name = serializers.SerializerMethodField()
     car_photo_url = serializers.SerializerMethodField()
     
@@ -291,6 +294,7 @@ class TripSerializer(serializers.ModelSerializer):
         model = Trip
         fields = [
             'id', 'driver', 'driver_name', 'driver_phone', 'driver_rating',
+            'is_subscription_active', # ✅ Added here
             'start_location_name', 'start_lat', 'start_lng', 
             'destination_name', 'dest_lat', 'dest_lng', 'departure_time',
             'available_seats', 'price_per_seat', 'created_at', 'is_active',
@@ -301,6 +305,16 @@ class TripSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'driver', 'driver_name', 'driver_phone', 'created_at']
     
+    # ✅ FIX: Safe method to check subscription using the NEW name 'driver_subscription'
+    def get_is_subscription_active(self, obj):
+        try:
+            # We use 'driver_subscription' because we changed the related_name in models.py
+            if hasattr(obj.driver, 'driver_subscription'):
+                return obj.driver.driver_subscription.is_active
+            return False
+        except:
+            return False
+
     def get_booked_seats(self, obj):
         try:
             booked = obj.bookings.filter(status='ACCEPTED').aggregate(total=Sum('seats_booked'))['total']
