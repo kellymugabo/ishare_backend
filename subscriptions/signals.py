@@ -1,11 +1,11 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from django.contrib.auth.models import User
+from django.conf import settings # ✅ Use settings to get the correct User model
 from django.utils import timezone
 from datetime import timedelta
 from .models import UserSubscription, SubscriptionPlan
 
-@receiver(post_save, sender=User)
+@receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def assign_free_trial(sender, instance, created, **kwargs):
     """
     Automatically gives a 30-day Free Trial to every new user.
@@ -13,34 +13,38 @@ def assign_free_trial(sender, instance, created, **kwargs):
     """
     if created:
         # 1. Ensure the 'Free Trial' plan exists
-        # Removed 'is_active' from defaults to fix the error
+        # ✅ FIX: Added 'target_role' because it is now required in your model
         trial_plan, _ = SubscriptionPlan.objects.get_or_create(
             name="Free Trial",
             defaults={
                 'description': "First month free access to all features.",
                 'price': 0.00,
                 'duration_days': 30,
+                'target_role': 'all' # ✅ CRITICAL FIX
             }
         )
 
         # 2. Ensure the 'Monthly Premium' plan exists (so they can pay later)
-        # Removed 'is_active' from defaults to fix the error
+        # ✅ FIX: Added 'target_role' here too
         SubscriptionPlan.objects.get_or_create(
             name="Monthly Premium",
             defaults={
                 'description': "Unlimited access to ride requests.",
                 'price': 5000.00,  # 5000 RWF
                 'duration_days': 30,
+                'target_role': 'driver' # ✅ CRITICAL FIX
             }
         )
 
         # 3. Assign the Free Trial to the new User
-        # We keep is_active=True here because UserSubscription usually has this field
+        # We calculate the date explicitly to prevent DB errors
+        end_date = timezone.now() + timedelta(days=30)
+
         UserSubscription.objects.create(
             user=instance,
             plan=trial_plan,
             start_date=timezone.now(),
-            end_date=timezone.now() + timedelta(days=30),
+            end_date=end_date,
             is_active=True
         )
         print(f"✅ Assigned 30-day Free Trial to {instance.username}")
