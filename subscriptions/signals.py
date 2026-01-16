@@ -2,33 +2,64 @@ import logging
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.conf import settings
-from .models import UserProfile
+from django.utils import timezone
+from datetime import timedelta
 
+# ✅ CORRECT IMPORTS (This fixes the crash)
+from subscriptions.models import UserSubscription, SubscriptionPlan
+from core.models import UserProfile  # <-- IMPORT FROM CORE, NOT .models
+
+# Setup logger to see errors in Railway logs without crashing
 logger = logging.getLogger(__name__)
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
-def create_user_profile(sender, instance, created, **kwargs):
+def assign_free_trial(sender, instance, created, **kwargs):
     """
-    Safely creates a UserProfile when a User is created.
+    Safely assigns a 30-day Free Trial to every new user.
+    Catches errors so the Admin Panel doesn't crash.
     """
     if created:
         try:
-            # Check if profile already exists to prevent crashes
-            if not UserProfile.objects.filter(user=instance).exists():
-                UserProfile.objects.create(user=instance, role='passenger') # Default to passenger
-                print(f"✅ Profile created for {instance.username}")
-        except Exception as e:
-            print(f"❌ CORE SIGNAL ERROR: Could not create profile: {e}")
-            logger.error(f"Profile creation failed: {e}")
+            # 1. Ensure the 'Free Trial' plan exists
+            # We add 'target_role' because it is required by your model now
+            trial_plan, _ = SubscriptionPlan.objects.get_or_create(
+                name="Free Trial",
+                defaults={
+                    'description': "First month free access to all features.",
+                    'price': 0.00,
+                    'duration_days': 30,
+                    'target_role': 'all' 
+                }
+            )
 
-@receiver(post_save, sender=settings.AUTH_USER_MODEL)
-def save_user_profile(sender, instance, **kwargs):
-    """
-    Safely saves the profile when the user is saved.
-    """
-    try:
-        if hasattr(instance, 'profile'):
-            instance.profile.save()
-    except Exception as e:
-        # Ignore errors here to prevent Admin crashes
-        pass
+            # 2. Ensure the 'Monthly Premium' plan exists (for later)
+            SubscriptionPlan.objects.get_or_create(
+                name="Monthly Premium",
+                defaults={
+                    'description': "Unlimited access to ride requests.",
+                    'price': 5000.00,
+                    'duration_days': 30,
+                    'target_role': 'driver'
+                }
+            )
+
+            # 3. Check if subscription already exists (prevent duplicates)
+            if UserSubscription.objects.filter(user=instance).exists():
+                return
+
+            # 4. Assign the Free Trial
+            end_date = timezone.now() + timedelta(days=30)
+            
+            UserSubscription.objects.create(
+                user=instance,
+                plan=trial_plan,
+                start_date=timezone.now(),
+                end_date=end_date,
+                is_active=True
+            )
+            print(f"✅ SUCCESS: Assigned Free Trial to {instance.username}")
+
+        except Exception as e:
+            # 🛑 THIS CATCHES THE ERROR SO ADMIN PANEL DOESN'T CRASH 500
+            print(f"⚠️ SIGNAL WARNING: Could not assign subscription: {str(e)}")
+            logger.error(f"Signal Error for user {instance.id}: {e}")
