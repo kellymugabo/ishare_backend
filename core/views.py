@@ -1,7 +1,8 @@
-import random 
+import random
+import uuid # ✅ Moved to top level
 from datetime import timedelta
-from rest_framework import viewsets, status, permissions, generics, views
-from rest_framework.exceptions import ValidationError as DRFValidationError
+from rest_framework import viewsets, status, permissions, generics, views, filters
+from rest_framework.exceptions import ValidationError as DRFValidationError, PermissionDenied
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
@@ -24,7 +25,7 @@ from .models import (
 # ✅ Import Models from SUBSCRIPTIONS
 from subscriptions.models import UserSubscription, SubscriptionPlan
 
-# ✅ Import Permissions (THE NEW SECURITY RULE)
+# ✅ Import Permissions
 from .permissions import IsDriverOrReadOnly
 
 # ✅ Import Serializers
@@ -34,7 +35,7 @@ from .serializers import (
     PaymentSerializer, DriverVerificationSerializer
 )
 
-# ✅ Try to import email utils, or define simple fallbacks if missing
+# ✅ Email Fallbacks
 try:
     from .emails import send_booking_confirmation, send_otp_email
 except ImportError:
@@ -56,8 +57,6 @@ class RegisterViewSet(viewsets.ViewSet):
         if serializer.is_valid():
             user = serializer.save()
             
-            # NOTE: Subscription checks are handled by signals.py in subscriptions app
-
             # ✅ SEND WELCOME EMAIL
             try:
                 user_role = user.profile.role.capitalize() if hasattr(user, 'profile') else "Member"
@@ -164,7 +163,7 @@ class ResetPasswordView(views.APIView):
         return Response({"error": "Invalid reset code or email."}, status=400)
 
 # =====================================================
-#  USER PROFILE (Including 'me')
+#  USER PROFILE
 # =====================================================
 class UserProfileViewSet(viewsets.ModelViewSet):
     queryset = UserProfile.objects.all()
@@ -194,21 +193,20 @@ class UserProfileViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 # =====================================================
-#  TRIPS (Updated with Permissions)
+#  TRIPS (Fixed Security Logic)
 # =====================================================
 class TripViewSet(viewsets.ModelViewSet):
     serializer_class = TripSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
-
-    # ✅ SECURE: Only authenticated users can access, AND
-    # Only Drivers can create/edit (Passengers are Read-Only)
     permission_classes = [IsAuthenticated, IsDriverOrReadOnly]
+    
+    # Enable filtering
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['start_location_name', 'destination_name']
 
     def get_permissions(self):
-        # Allow anyone (even guests) to VIEW trips on the home screen
         if self.action in ['list', 'retrieve']:
             return [AllowAny()]
-        # For everything else (create, update, delete), use the strict rules
         return [IsAuthenticated(), IsDriverOrReadOnly()]
 
     def get_queryset(self):
@@ -227,20 +225,20 @@ class TripViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         try:
-            # ✅ SUBSCRIPTION CHECK
+            # 1. SUBSCRIPTION CHECK (Fixed Logic)
+            
             has_active_sub = UserSubscription.objects.filter(
                 user=request.user, 
                 is_active=True
             ).exists()
             
+            # ✅ SECURITY FIX: If no active sub, block IMMEDIATELY
             if not has_active_sub:
-                 # Double check expiry dates just in case
-                 sub = UserSubscription.objects.filter(user=request.user).order_by('-end_date').first()
-                 if sub and sub.end_date < timezone.now():
-                     return Response({
-                        'error': 'Your subscription has expired. Please renew to create trips.'
-                     }, status=status.HTTP_403_FORBIDDEN)
+                 return Response({
+                    'error': 'You must have an active subscription to post a ride.'
+                 }, status=status.HTTP_403_FORBIDDEN)
 
+            # 2. Proceed if valid
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             self.perform_create(serializer)
@@ -253,6 +251,7 @@ class TripViewSet(viewsets.ModelViewSet):
         # Optional: Update Vehicle info if provided
         new_car_name = self.request.data.get('new_car_name')
         new_car_photo = self.request.FILES.get('new_car_photo')
+        
         if hasattr(self.request.user, 'profile'):
             profile = self.request.user.profile
             if new_car_name: profile.vehicle_model = new_car_name
@@ -392,7 +391,6 @@ class PaymentViewSet(viewsets.ViewSet):
             if hasattr(booking, 'payment'):
                 return Response({'status': 'error', 'message': 'Already paid'}, status=400)
             
-            import uuid
             transaction_ref = f"MANUAL-{uuid.uuid4().hex[:8].upper()}"
 
             PaymentTransaction.objects.create(
