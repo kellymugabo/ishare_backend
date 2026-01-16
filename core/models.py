@@ -41,9 +41,11 @@ class DriverVerification(models.Model):
         ordering = ['-submitted_at']
 
     def __str__(self):
-        return f"{self.user.email} - {self.status}"
+        # Safe string representation
+        email = getattr(self.user, 'email', 'Unknown User')
+        return f"{email} - {self.status}"
 
-# --- 2. User Profile (Updated with Vehicle Info) ---
+# --- 2. User Profile ---
 class UserProfile(models.Model):
     USER_ROLES = (
         ('driver', 'Driver'),
@@ -56,12 +58,9 @@ class UserProfile(models.Model):
     reset_code = models.CharField(max_length=6, blank=True, null=True)
     profile_picture = models.ImageField(upload_to='profile_pics/', null=True, blank=True)
     
-    bio = models.TextField(blank=True)
-    rating = models.FloatField(default=5.0)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    # --- VEHICLE DETAILS (Restored from your code) ---
+    # Vehicle Info (Merged correctly - no duplicates)
+    vehicle_model = models.CharField(max_length=100, blank=True, null=True)
+    vehicle_photo = models.ImageField(upload_to='vehicle_pics/', blank=True, null=True)
     vehicle_plate_number = models.CharField(
         max_length=20, 
         blank=True, 
@@ -73,12 +72,22 @@ class UserProfile(models.Model):
             )
         ]
     )
-    vehicle_model = models.CharField(max_length=100, blank=True, null=True)
     vehicle_seats = models.PositiveSmallIntegerField(blank=True, null=True)
-    vehicle_photo = models.ImageField(upload_to='vehicle_photos/', null=True, blank=True)
+    
+    bio = models.TextField(blank=True)
+    rating = models.FloatField(default=5.0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
+    # ✅ THE ONE AND ONLY SAFE __str__ METHOD
     def __str__(self):
-        return f"{self.user.username} ({self.role})"
+        try:
+            if self.user:
+                username = getattr(self.user, 'username', 'Unknown')
+                return f"{username} ({self.role})"
+        except Exception:
+            pass
+        return f"Profile {self.pk}"
 
 # --- 3. Trip ---
 class Trip(models.Model):
@@ -105,7 +114,8 @@ class Trip(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"Trip {self.id} by {self.driver.username}"
+        driver_name = getattr(self.driver, 'username', 'Unknown Driver')
+        return f"Trip {self.id} by {driver_name}"
 
 # --- 4. Booking ---
 class Booking(models.Model):
@@ -130,7 +140,8 @@ class Booking(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Booking {self.id} by {self.passenger.username}"
+        passenger_name = getattr(self.passenger, 'username', 'Unknown Passenger')
+        return f"Booking {self.id} by {passenger_name}"
 
 # --- 5. Rating ---
 class Rating(models.Model):
@@ -144,7 +155,7 @@ class Rating(models.Model):
     def __str__(self):
         return f"Rating {self.id} - {self.score}/5"
 
-# --- 6. Payment Transaction (Restored) ---
+# --- 6. Payment Transaction ---
 class PaymentTransaction(models.Model):
     PAYMENT_STATUS_CHOICES = (
         ('pending', 'Pending'),
