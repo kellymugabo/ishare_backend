@@ -15,7 +15,7 @@ from django.db.models import Count, Q
 from django.core.exceptions import ValidationError 
 from django.core.mail import send_mail
 from django.conf import settings
-from django.db import connection # ✅ ADDED THIS IMPORT FOR SQL COMMANDS
+from django.db import connection # ✅ SQL commands for ghost tables
 
 # ✅ Import Models from CORE
 from .models import (
@@ -58,7 +58,6 @@ class RegisterViewSet(viewsets.ViewSet):
         if serializer.is_valid():
             user = serializer.save()
             
-            # ✅ SEND WELCOME EMAIL
             try:
                 user_role = user.profile.role.capitalize() if hasattr(user, 'profile') else "Member"
                 subject = f"Welcome to iShare, {user.username}!"
@@ -81,7 +80,6 @@ The iShare Team
             except Exception as e:
                 print(f"❌ Failed to send welcome email: {str(e)}")
             
-            # Return Profile Data
             profile_data = UserProfileSerializer(user.profile, context={'request': request}).data
             
             return Response(
@@ -100,7 +98,6 @@ class CustomTokenObtainPairView(TokenObtainPairView):
         data = request.data.copy()
         login_input = data.get("username", "")
 
-        # Allow Login with Email
         if '@' in login_input:
             user = User.objects.filter(email=login_input).first()
             if user:
@@ -113,7 +110,6 @@ class CustomTokenObtainPairView(TokenObtainPairView):
         except Exception:
             return Response({"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
-        # Ensure Profile Exists
         user = serializer.user
         if not hasattr(user, "profile"):
             UserProfile.objects.create(user=user)
@@ -194,7 +190,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 # =====================================================
-#  TRIPS (Fixed Security Logic)
+#  TRIPS
 # =====================================================
 class TripViewSet(viewsets.ModelViewSet):
     serializer_class = TripSerializer
@@ -225,30 +221,25 @@ class TripViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         try:
-            # 1. SUBSCRIPTION CHECK (Secure & Crash Proof)
             has_active_sub = UserSubscription.objects.filter(
                 user=request.user, 
                 is_active=True
             ).exists()
             
-            # 🛑 STOP HERE if no subscription
             if not has_active_sub:
                  return Response({
                     'error': 'You must have an active subscription to post a ride.'
                  }, status=status.HTTP_403_FORBIDDEN)
 
-            # 2. Proceed if valid
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             self.perform_create(serializer)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
             
         except Exception as e:
-            # This catches crashes and shows you the error instead of 500
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def perform_create(self, serializer):
-        # Optional: Update Vehicle info if provided
         new_car_name = self.request.data.get('new_car_name')
         new_car_photo = self.request.FILES.get('new_car_photo')
         
@@ -282,7 +273,6 @@ class BookingViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         try:
-            # ✅ SUBSCRIPTION CHECK
             has_active_sub = UserSubscription.objects.filter(
                 user=request.user, 
                 is_active=True
@@ -451,14 +441,11 @@ def check_verification_status(request):
         return Response({'is_verified': False, 'status': None})
 
 # =====================================================
-#  🚑 EMERGENCY REPAIR TOOL (Use to fix broken Users)
+#  🚑 EMERGENCY REPAIR TOOL (Fixes missing Profiles)
 # =====================================================
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def fix_all_profiles(request):
-    """
-    Visits every user. If they are missing a Profile, creates one.
-    """
     users = User.objects.all()
     fixed_count = 0
     log = []
@@ -484,21 +471,30 @@ def fix_all_profiles(request):
 @permission_classes([AllowAny])
 def force_delete_user(request, username):
     """
-    1. Drops the 'ghost' table (api_userprofile) blocking deletions.
-    2. Deletes the user safely.
+    1. Drops all 'ghost' tables from the old 'api' app.
+    2. Deletes the user safely bypassing admin crashes.
     """
     try:
-        # --- STEP 1: KILL THE GHOST TABLE ---
+        # --- STEP 1: KILL THE GHOST TABLES HIT-LIST ---
         with connection.cursor() as cursor:
-            # We use IF EXISTS so it doesn't crash if the table is already gone
-            cursor.execute("DROP TABLE IF EXISTS api_userprofile CASCADE;")
-            print("✅ Ghost table 'api_userprofile' dropped successfully.")
+            # Drop every possible table from the old 'api' app
+            ghost_tables = [
+                "api_userprofile", 
+                "api_subscription", 
+                "api_trip", 
+                "api_booking", 
+                "api_rating"
+            ]
+            for table in ghost_tables:
+                cursor.execute(f"DROP TABLE IF EXISTS {table} CASCADE;")
+            
+            print("✅ All ghost tables from 'api' dropped.")
 
         # --- STEP 2: FIND & DELETE USER ---
         target_user = User.objects.get(username=username)
         user_id = target_user.id
         
-        # Manual Cleanup of current subscription (just in case)
+        # Manual Cleanup of current subscription to prevent signal conflicts
         if hasattr(target_user, 'driver_subscription'):
             target_user.driver_subscription.delete()
             
@@ -506,7 +502,7 @@ def force_delete_user(request, username):
         
         return Response({
             "status": "success", 
-            "message": f"User '{username}' (ID: {user_id}) has been DELETED. Ghost table removed."
+            "message": f"User '{username}' (ID: {user_id}) DELETED. All ghost tables removed."
         }, status=200)
 
     except User.DoesNotExist:
