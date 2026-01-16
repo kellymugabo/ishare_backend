@@ -24,7 +24,6 @@ class DriverVerification(models.Model):
         validators=[RegexValidator(regex=r'^\+250\d{9}$', message='Phone number must be in format +250XXXXXXXXX')]
     )
     
-    # Photos
     national_id_photo = models.ImageField(upload_to='verification/', null=True, blank=True)
     license_photo = models.ImageField(upload_to='verification/', null=True, blank=True)
 
@@ -41,9 +40,10 @@ class DriverVerification(models.Model):
         ordering = ['-submitted_at']
 
     def __str__(self):
-        # Safe string representation
-        email = getattr(self.user, 'email', 'Unknown User')
-        return f"{email} - {self.status}"
+        try:
+            return f"Verification: {self.user.email} - {self.status}"
+        except Exception:
+            return f"Verification {self.pk}"
 
 # --- 2. User Profile ---
 class UserProfile(models.Model):
@@ -58,7 +58,6 @@ class UserProfile(models.Model):
     reset_code = models.CharField(max_length=6, blank=True, null=True)
     profile_picture = models.ImageField(upload_to='profile_pics/', null=True, blank=True)
     
-    # Vehicle Info (Merged correctly - no duplicates)
     vehicle_model = models.CharField(max_length=100, blank=True, null=True)
     vehicle_photo = models.ImageField(upload_to='vehicle_pics/', blank=True, null=True)
     vehicle_plate_number = models.CharField(
@@ -79,15 +78,11 @@ class UserProfile(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # ✅ THE ONE AND ONLY SAFE __str__ METHOD
     def __str__(self):
         try:
-            if self.user:
-                username = getattr(self.user, 'username', 'Unknown')
-                return f"{username} ({self.role})"
+            return f"{self.user.username} ({self.role})"
         except Exception:
-            pass
-        return f"Profile {self.pk}"
+            return f"Profile {self.pk}"
 
 # --- 3. Trip ---
 class Trip(models.Model):
@@ -104,7 +99,6 @@ class Trip(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
 
-    # Amenities
     has_ac = models.BooleanField(default=False, verbose_name="Air Conditioning")
     allows_luggage = models.BooleanField(default=False, verbose_name="Large Luggage Allowed")
     no_smoking = models.BooleanField(default=True, verbose_name="No Smoking")
@@ -114,8 +108,11 @@ class Trip(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        driver_name = getattr(self.driver, 'username', 'Unknown Driver')
-        return f"Trip {self.id} by {driver_name}"
+        # ✅ CRITICAL FIX: Wrapped in try/except to prevent delete crash
+        try:
+            return f"Trip {self.id} by {self.driver.username}"
+        except Exception:
+            return f"Trip {self.id}"
 
 # --- 4. Booking ---
 class Booking(models.Model):
@@ -140,8 +137,11 @@ class Booking(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        passenger_name = getattr(self.passenger, 'username', 'Unknown Passenger')
-        return f"Booking {self.id} by {passenger_name}"
+        # ✅ CRITICAL FIX: Wrapped in try/except
+        try:
+            return f"Booking {self.id} by {self.passenger.username}"
+        except Exception:
+            return f"Booking {self.id}"
 
 # --- 5. Rating ---
 class Rating(models.Model):
@@ -172,4 +172,4 @@ class PaymentTransaction(models.Model):
     paid_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
-        return f"Payment {self.id} - {self.amount} RWF - {self.status}"
+        return f"Payment {self.id} - {self.amount} RWF"
