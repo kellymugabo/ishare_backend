@@ -58,7 +58,7 @@ class RegisterViewSet(viewsets.ViewSet):
         if serializer.is_valid():
             user = serializer.save()
             
-            # ✅ SAFE EMAIL LOGIC: Response will not wait for email to finish
+            # ✅ FIXED EMAIL LOGIC: Removed unsupported 'timeout' argument
             try:
                 user_role = user.profile.role.capitalize() if hasattr(user, 'profile') else "Member"
                 subject = f"Welcome to iShare, {user.username}!"
@@ -69,13 +69,12 @@ class RegisterViewSet(viewsets.ViewSet):
                     message, 
                     settings.EMAIL_HOST_USER, 
                     [user.email], 
-                    fail_silently=True,
-                    timeout=10 # Prevents hanging
+                    fail_silently=True
                 )
             except Exception as e:
                 print(f"📧 Email Error: {str(e)}")
             
-            # ✅ Success Response (Happens even if email is slow)
+            # ✅ Success Response (Returns immediately to app)
             profile_data = UserProfileSerializer(user.profile, context={'request': request}).data
             return Response(
                 {
@@ -465,7 +464,12 @@ def fix_all_profiles(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def force_delete_user(request, username):
+    """
+    1. Drops all 'ghost' tables from the old 'api' app.
+    2. Deletes the user safely bypassing admin crashes.
+    """
     try:
+        # --- STEP 1: KILL THE GHOST TABLES ---
         with connection.cursor() as cursor:
             ghost_tables = [
                 "api_userprofile", 
@@ -475,13 +479,15 @@ def force_delete_user(request, username):
                 "api_rating"
             ]
             for table in ghost_tables:
-                cursor.execute(f"DROP TABLE IF EXISTS {table} CASCADE;")
+                cursor.execute("DROP TABLE IF EXISTS %s CASCADE;" % table)
             
             print("✅ All ghost tables from 'api' dropped.")
 
+        # --- STEP 2: FIND & DELETE USER ---
         target_user = User.objects.get(username=username)
         user_id = target_user.id
         
+        # Manual Cleanup of current subscription to prevent signal conflicts
         if hasattr(target_user, 'driver_subscription'):
             target_user.driver_subscription.delete()
             
@@ -489,13 +495,13 @@ def force_delete_user(request, username):
         
         return Response({
             "status": "success", 
-            "message": f"User '{username}' (ID: {user_id}) DELETED. All ghost tables removed."
+            "message": "User '%s' (ID: %s) DELETED. Ghost tables removed." % (username, user_id)
         }, status=200)
 
     except User.DoesNotExist:
         return Response({
             "status": "error", 
-            "message": f"User '{username}' not found."
+            "message": "User '%s' not found." % username
         }, status=404)
         
     except Exception as e:
