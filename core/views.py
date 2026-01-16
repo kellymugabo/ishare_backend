@@ -1,5 +1,5 @@
 import random
-import uuid # ✅ Moved to top level
+import uuid 
 from datetime import timedelta
 from rest_framework import viewsets, status, permissions, generics, views, filters
 from rest_framework.exceptions import ValidationError as DRFValidationError, PermissionDenied
@@ -448,3 +448,30 @@ def check_verification_status(request):
         })
     except DriverVerification.DoesNotExist:
         return Response({'is_verified': False, 'status': None})
+
+# =====================================================
+#  🚑 EMERGENCY REPAIR TOOL (Use to fix broken Users)
+# =====================================================
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def fix_all_profiles(request):
+    """
+    Visits every user. If they are missing a Profile, creates one.
+    """
+    users = User.objects.all()
+    fixed_count = 0
+    log = []
+
+    for user in users:
+        try:
+            if not hasattr(user, 'profile'):
+                UserProfile.objects.create(user=user, role='passenger')
+                fixed_count += 1
+                log.append(f"Fixed: {user.username}")
+        except Exception as e:
+            log.append(f"Error on {user.username}: {str(e)}")
+            
+    return Response({
+        "message": f"Operation Complete. Fixed {fixed_count} broken profiles.",
+        "details": log
+    })
