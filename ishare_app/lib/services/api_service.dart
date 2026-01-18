@@ -17,8 +17,8 @@ class ApiService {
 
   ApiService() {
     _dio.options.baseUrl = baseUrl;
-    _dio.options.connectTimeout = const Duration(second: 60);
-    _dio.options.receiveTimeout = const Duration(second: 60);
+    _dio.options.connectTimeout = const Duration(seconds: 60);
+    _dio.options.receiveTimeout = const Duration(seconds: 60);
     
     // Web-specific configuration for CORS
     if (kIsWeb) {
