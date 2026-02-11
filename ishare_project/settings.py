@@ -1,6 +1,6 @@
 """
 Django settings for ishare_project project.
-Updated for Railway Deployment
+Updated for DigitalOcean App Platform & Spaces
 """
 import os
 import dj_database_url
@@ -13,32 +13,29 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-your-secret-key-here-change-this-in-production')
 
-# ✅ SECURITY: Smart logic for Production vs Local
-# On Railway, we usually set an environment variable specifically, or rely on DEBUG=False
-# If 'RAILWAY_ENVIRONMENT' is present, we are in production.
-if 'RAILWAY_ENVIRONMENT' in os.environ:
+# ✅ SECURITY: Smart logic for Production (DigitalOcean) vs Local
+# DigitalOcean App Platform provides unique environment variables we can check.
+IS_DIGITALOCEAN = 'DIGITALOCEAN_APP_URL' in os.environ
+
+if IS_DIGITALOCEAN:
     DEBUG = False
 else:
     DEBUG = True
 
 # ✅ ALLOWED HOSTS
+# Added DigitalOcean domain pattern to your existing list.
 ALLOWED_HOSTS = [
     '*',
-    'amiable-amazement-production-4d09.up.railway.app',  # Production Railway domain
-    'amiable-amazement.railway.internal',  # Railway internal service name
-    '*.railway.app',
-    '*.up.railway.app',
+    '.ondigitalocean.app',  # ✅ Added for DigitalOcean
+    'localhost',
+    '127.0.0.1',
 ]
 
-# ✅ CSRF TRUSTED ORIGINS (CRITICAL FOR RAILWAY)
-# Django 4.0+ requires this for HTTPS sites. 
-# This allows the Railway domain to send data to your server.
+# ✅ CSRF TRUSTED ORIGINS
+# Updated to trust DigitalOcean subdomains for secure POST requests.
 CSRF_TRUSTED_ORIGINS = [
-    'https://*.railway.app',
-    'https://*.up.railway.app',
-    'https://amiable-amazement-production-4d09.up.railway.app',  # Production Railway domain
-    'https://amiable-amazement.railway.internal',  # Railway internal service
-    'http://amiable-amazement.railway.internal',   # Railway internal service (HTTP)
+    'https://*.ondigitalocean.app',  # ✅ Added for DigitalOcean
+    'http://localhost:3000',
 ]
 
 # Application definition
@@ -56,15 +53,11 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'rest_framework.authtoken',
     'corsheaders', 
+    'storages',  # ✅ Required for DigitalOcean Spaces
     
     # Your apps
-    #'api',
     'subscriptions',
     'core',
-    # 'trips',    # Ensure these are added if they are separate apps
-    # 'ratings',
-    # 'profiles',
-    
 ]
 
 MIDDLEWARE = [
@@ -79,8 +72,8 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# ✅ Trust proxy headers for HTTPS detection (required for Railway)
-if 'RAILWAY_ENVIRONMENT' in os.environ or not DEBUG:
+# ✅ Trust proxy headers for HTTPS detection (Required for DO App Platform)
+if IS_DIGITALOCEAN or not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     USE_TZ = True
 
@@ -105,8 +98,6 @@ TEMPLATES = [
 WSGI_APPLICATION = 'ishare_project.wsgi.application'
 
 # ✅ DATABASE CONFIGURATION
-# It tries to use the Production Database first (from env variable DATABASE_URL).
-# If that fails (e.g., on your laptop), it falls back to SQLite.
 DATABASES = {
     'default': dj_database_url.config(
         default='sqlite:///' + os.path.join(BASE_DIR, 'db.sqlite3'),
@@ -116,18 +107,10 @@ DATABASES = {
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
 # Internationalization
@@ -139,87 +122,42 @@ USE_TZ = True
 # ✅ STATIC FILES (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-
-# Enable WhiteNoise's compression and caching support
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # =========================================================
-# ✅ MEDIA FILES CONFIGURATION (FIXED FOR RAILWAY VOLUME)
+# ✅ MEDIA FILES CONFIGURATION (DIGITALOCEAN SPACES)
 # =========================================================
-MEDIA_URL = '/media/'
-
-# If we are on Railway, FORCE the path to /app/media (Where the volume is)
-if 'RAILWAY_ENVIRONMENT' in os.environ:
-    MEDIA_ROOT = '/app/media'
+# Unlike Railway, DigitalOcean App Platform doesn't have permanent volumes.
+# We use "Spaces" (Object Storage) so your photos aren't deleted on redeploy.
+if IS_DIGITALOCEAN:
+    AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
+    AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
+    AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME')
+    AWS_S3_ENDPOINT_URL = os.environ.get('AWS_S3_ENDPOINT_URL')
+    AWS_S3_REGION_NAME = os.environ.get('AWS_S3_REGION_NAME')
+    
+    AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.{AWS_S3_REGION_NAME}.digitaloceanspaces.com'
+    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+    MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
 else:
     # If local laptop, use the default folder
+    MEDIA_URL = '/media/'
     MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-
-# 🔍 DEBUGGING: Print this to the logs so we can see what is happening
-print(f"📂 CONFIG: MEDIA_ROOT is set to: {MEDIA_ROOT}")
-try:
-    if not os.path.exists(MEDIA_ROOT):
-        print(f"⚠️ WARNING: {MEDIA_ROOT} does not exist yet (It will be created on first upload)")
-    else:
-        # Check if we can see any files inside
-        files = os.listdir(MEDIA_ROOT)
-        print(f"✅ SUCCESS: {MEDIA_ROOT} exists. Found {len(files)} files/folders: {files}")
-except Exception as e:
-    print(f"❌ ERROR checking media folder: {e}")
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# CORS settings - Fixed for Flutter Web
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:8000",
-    "http://localhost:*",  # Flutter web dev server
-    "http://127.0.0.1:*",  # Flutter web dev server
-    "https://amiable-amazement.railway.internal",  # Railway internal service
-    "http://amiable-amazement.railway.internal",   # Railway internal service
-]
-
-# ✅ CRITICAL: Allow all origins for web (Flutter web uses dynamic ports)
-# This is safe because we're using JWT tokens for authentication
+# ✅ CORS settings - Fixed for Flutter Web
 CORS_ALLOW_ALL_ORIGINS = True
-
-# ✅ Allow credentials (cookies, authorization headers)
 CORS_ALLOW_CREDENTIALS = True
-
-# ✅ Allowed HTTP methods
-CORS_ALLOW_METHODS = [
-    'DELETE',
-    'GET',
-    'OPTIONS',
-    'PATCH',
-    'POST',
-    'PUT',
-]
-
-# ✅ Allowed headers (including Authorization for JWT)
+CORS_ALLOW_METHODS = ['DELETE', 'GET', 'OPTIONS', 'PATCH', 'POST', 'PUT']
 CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',  # ✅ Critical for JWT Bearer tokens
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
-    'access-control-allow-origin',  # ✅ Additional header support
-    'access-control-allow-methods',
+    'accept', 'accept-encoding', 'authorization', 'content-type',
+    'dnt', 'origin', 'user-agent', 'x-csrftoken', 'x-requested-with',
+    'access-control-allow-origin', 'access-control-allow-methods',
     'access-control-allow-headers',
 ]
-
-# ✅ Expose headers to the client
-CORS_EXPOSE_HEADERS = [
-    'content-type',
-    'authorization',
-]
-
-# ✅ Preflight cache duration (in seconds)
+CORS_EXPOSE_HEADERS = ['content-type', 'authorization']
 CORS_PREFLIGHT_MAX_AGE = 86400  # 24 hours
 
 # REST Framework settings
@@ -254,15 +192,11 @@ SIMPLE_JWT = {
     'TOKEN_TYPE_CLAIM': 'token_type',
 }
 
+# EMAIL CONFIGURATION
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
-
-# SSL Settings (Correct for Port 465)
 EMAIL_PORT = 465
-EMAIL_USE_TLS = False
 EMAIL_USE_SSL = True
-
 EMAIL_HOST_USER = 'murenzicharles24@gmail.com'
-EMAIL_HOST_PASSWORD = 'itqipoohlekmayph' # Spaces removed
-
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', 'itqipoohlekmayph')
 DEFAULT_FROM_EMAIL = 'ISHARE Support <murenzicharles24@gmail.com>'
