@@ -8,7 +8,8 @@ import '../models/trip_model.dart';
 import '../models/booking_model.dart';
 
 // ⚠️ NETWORK CONFIGURATION
-const String baseUrl = "https://amiable-amazement-production-4d09.up.railway.app";
+// Remove the extra double quote at the end
+const String baseUrl = "https://seashell-app-sz2nv.ondigitalocean.app";
 
 class ApiService {
   final Dio _dio = Dio();
