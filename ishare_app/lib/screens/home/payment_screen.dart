@@ -21,7 +21,7 @@ class PaymentScreen extends ConsumerStatefulWidget {
     super.key, 
     required this.totalAmount,
     required this.bookingId,
-    this.planId, // Nullable, but needed if bookingId == -1
+    this.planId, 
   });
 
   @override
@@ -32,8 +32,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   bool _isProcessing = false;
   PaymentMethod _selectedMethod = PaymentMethod.mobileMoney;
   
-  final _phoneController = TextEditingController();
-  final _transactionIdController = TextEditingController(); // ✅ NEW: Required for Admin
+  // ✅ UPDATED: Setting your number as the default controller value
+  final _phoneController = TextEditingController(text: "0793487065");
+  final _transactionIdController = TextEditingController(); 
   final _formKey = GlobalKey<FormState>();
 
   @override
@@ -55,9 +56,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     final l10n = AppLocalizations.of(context)!;
 
     if (_selectedMethod == PaymentMethod.mobileMoney) {
-       if (!_formKey.currentState!.validate()) {
-         return;
-       }
+        if (!_formKey.currentState!.validate()) {
+          return;
+        }
     }
 
     try {
@@ -82,7 +83,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         if (e.response != null && e.response?.data != null) {
           final data = e.response!.data;
           if (data is Map) {
-             serverMessage = data['message'] ?? data['error'] ?? "";
+              serverMessage = data['message'] ?? data['error'] ?? "";
           }
         }
 
@@ -104,9 +105,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     }
   }
 
-  // --- 1. MOBILE MONEY LOGIC (MERGED) ---
   Future<void> _processMobileMoneyPayment(AppLocalizations l10n) async {
-    // 1. Show Instructions Dialog First (So they know where to pay)
     final userConfirmed = await _showInstructionDialog();
 
     if (userConfirmed == true) {
@@ -114,13 +113,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       final apiService = ref.read(apiServiceProvider);
 
       try {
-        // ---------------------------------------------------------
-        // CASE A: SUBSCRIPTION PAYMENT (Real Backend Call)
-        // ---------------------------------------------------------
         if (widget.bookingId == -1) {
            if (widget.planId == null) throw Exception("Plan ID is missing");
 
-           // ✅ CALL THE NEW API ENDPOINT
            await apiService.submitSubscriptionPayment(
              widget.planId!, 
              _transactionIdController.text.trim()
@@ -130,9 +125,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
              _showPaymentSuccess(l10n, _transactionIdController.text.trim());
            }
         } 
-        // ---------------------------------------------------------
-        // CASE B: RIDE PAYMENT (Simulation)
-        // ---------------------------------------------------------
         else {
           final response = await apiService.simulatePayment(
             bookingId: widget.bookingId,
@@ -143,7 +135,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           final transactionId = response['transaction_id'] ?? "MANUAL-CONFIRM";
           
           if (mounted) {
-             _showPaymentSuccess(l10n, transactionId);
+              _showPaymentSuccess(l10n, transactionId);
           }
         }
       } catch (e) {
@@ -155,13 +147,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   }
 
   Future<bool?> _showInstructionDialog() async {
-    String targetPhone = "0788 123 456"; 
+    // ✅ UPDATED: Target phone for the user instructions
+    String targetPhone = "0793487065"; 
     String titleText = "Pay to ISHARE";
     
-    // Logic to change phone number if paying a driver directly
     if (widget.bookingId != -1) {
        titleText = "Pay to Driver"; 
-       // You would fetch driver phone here if needed, or keep generic company phone
     }
 
     return showDialog<bool>(
@@ -248,8 +239,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context); // Close dialog
-              Navigator.pop(context, true); // Return to previous screen
+              Navigator.pop(context); 
+              Navigator.pop(context, true); 
             },
             child: Text(l10n.done),
           ),
@@ -298,7 +289,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               Text(l10n.selectPaymentMethod, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
               
-              // ✅ RESTORED: Subtitles in Options
               _buildPaymentMethodOption(
                 PaymentMethod.mobileMoney, 
                 l10n.mobileMoney, 
@@ -322,7 +312,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
               const SizedBox(height: 24),
 
-              // ✅ NEW: TRANSACTION ID INPUT (Crucial for Admin Approval)
               if (_selectedMethod == PaymentMethod.mobileMoney) ...[
                 TextFormField(
                   controller: _transactionIdController,
@@ -342,7 +331,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                 ),
                 const SizedBox(height: 12),
                 
-                // Phone Number (Optional now, mostly for records)
                 TextFormField(
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
@@ -383,7 +371,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     );
   }
 
-  // ✅ RESTORED: Subtitle parameter
   Widget _buildPaymentMethodOption(PaymentMethod method, String title, IconData icon, String subtitle) {
     final isSelected = _selectedMethod == method;
     return InkWell(

@@ -700,3 +700,7 @@ final userProfileProvider = FutureProvider.autoDispose<UserProfileModel>((ref) a
   final apiService = ref.watch(apiServiceProvider);
   return await apiService.fetchMyProfile();
 });
+final userRoleProvider = FutureProvider<String?>((ref) async {
+  final storage = const FlutterSecureStorage();
+  return await storage.read(key: 'user_role');
+});

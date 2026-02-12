@@ -19,10 +19,9 @@ import 'services/api_service.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/home/main_wrapper.dart';
 
-// ✅ IMPORT THE FILE YOU JUST CREATED
+// ✅ Custom Localization Import
 import 'l10n/material_localizations_rw.dart'; 
 
-// ⚠️ Fallback for iOS (Cupertino) widgets to prevent crashes
 class RwCupertinoLocalizationsDelegate extends LocalizationsDelegate<CupertinoLocalizations> {
   const RwCupertinoLocalizationsDelegate();
   @override
@@ -37,24 +36,17 @@ class RwCupertinoLocalizationsDelegate extends LocalizationsDelegate<CupertinoLo
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ Fix lifecycle channel messages being discarded (web only)
-  // This prevents warnings about lifecycle messages being discarded
   if (kIsWeb) {
     try {
       ServicesBinding.instance.defaultBinaryMessenger.setMessageHandler(
         'flutter/lifecycle',
-        (ByteData? message) async {
-          // Silently handle lifecycle messages to prevent warnings
-          return null;
-        },
+        (ByteData? message) async => null,
       );
     } catch (e) {
-      // Ignore if already set
       debugPrint('Lifecycle handler already set: $e');
     }
   }
 
-  // ✅ CRITICAL FIX: Initializes date formatting for all languages (rw, fr, en)
   await initializeDateFormatting(); 
 
   try {
@@ -82,30 +74,20 @@ class IShareApp extends ConsumerWidget {
 
       // --- Localization Setup ---
       locale: currentLocale,
-      
       supportedLocales: const [
-        Locale('en'), // English
-        Locale('rw'), // Kinyarwanda
-        Locale('fr'), // French
+        Locale('en'),
+        Locale('rw'),
+        Locale('fr'),
       ],
-      
       localizationsDelegates: const [
-        // 1. Your App Translations (Strings inside .arb files)
         AppLocalizations.delegate,
-
-        // 2. ✅ YOUR CUSTOM KINYARWANDA UI FIX (System buttons like OK/Cancel)
         RwMaterialLocalizationsDelegate(),
-
-        // 3. The Custom Fallback for iOS/Cupertino Crash
         RwCupertinoLocalizationsDelegate(),
-
-        // 4. Standard Flutter Delegates
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
 
-      // --- Smart Fallback Logic ---
       localeResolutionCallback: (locale, supportedLocales) {
         if (locale != null) {
           for (var supportedLocale in supportedLocales) {
@@ -119,7 +101,14 @@ class IShareApp extends ConsumerWidget {
 
       // --- Theme & Navigation ---
       theme: _buildThemeData(),
+
+      // ✅ Correct Routes
+      routes: {
+        '/home': (context) => const MainWrapper(),
+        '/welcome': (context) => const WelcomeScreen(),
+      },
       
+      // ✅ Corrected Home Logic (Removed Duplicates)
       home: authState.when(
         data: (isLoggedIn) {
           if (isLoggedIn) {

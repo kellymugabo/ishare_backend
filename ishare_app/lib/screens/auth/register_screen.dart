@@ -105,7 +105,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         "username": _usernameController.text.trim(),
         "email": _emailController.text.trim(),
         "password": _passwordController.text,
-        "password2": _passwordController.text, // ✅ Added for backend compatibility
+        "password2": _passwordController.text, 
         "first_name": _firstNameController.text.trim(),
         "last_name": _lastNameController.text.trim(),
         "role": _isDriver ? "driver" : "passenger",
@@ -118,9 +118,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
       final formData = FormData.fromMap(formMap);
 
-      // 3. Attach Photo (✅ WEB SAFE METHOD)
+      // 3. Attach Photo
       if (_isDriver && _vehiclePhoto != null) {
-        // We use bytes because 'path' does not work reliably on Chrome/Web
         final bytes = await _vehiclePhoto!.readAsBytes();
         formData.files.add(MapEntry(
           "vehicle_photo",
@@ -131,48 +130,53 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         ));
       }
 
-      // 4. API Call - ✅ FIXED: Using Riverpod ref
+      // 4. API Call - Register
       await ref.read(apiServiceProvider).register(formData);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Account created! Please login."),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.pop(context); // Return to login
+        // --- AUTO LOGIN LOGIC ---
+        try {
+          // Attempt to login immediately using the credentials provided
+          await ref.read(apiServiceProvider).login(
+            username: _usernameController.text.trim(),
+            password: _passwordController.text,
+            role: _isDriver ? "driver" : "passenger",
+          );
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Welcome to ISHARE! Registration complete."),
+                backgroundColor: Colors.green,
+              ),
+            );
+            // Navigate to Home and clear the navigation stack
+            Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+          }
+        } catch (loginError) {
+          debugPrint("Auto-login failed: $loginError");
+          // If login fails, we send them back to login screen normally
+          if (mounted) {
+            Navigator.pop(context);
+          }
+        }
       }
 
     } on DioException catch (e) {
-      // 🔍 DETAILED ERROR LOGGING
-      if (e.response?.data != null) {
-        debugPrint("❌ SERVER ERROR DETAILS: ${e.response?.data}");
-      }
-
-      // Handle Server Errors
+      debugPrint("❌ SERVER ERROR DETAILS: ${e.response?.data}");
       String message = "Registration failed";
-      
-      // Try to parse Django style errors { "field": ["Error"] }
       final data = e.response?.data;
+      
       if (data is Map<String, dynamic>) {
         if (data.containsKey('detail')) message = data['detail'];
         else if (data.containsKey('message')) message = data['message'];
         else if (data.containsKey('error')) message = data['error'];
         else if (data.isNotEmpty) {
-           // Grab the first field error (e.g., username: ["Already exists"])
            final firstKey = data.keys.first;
            final firstError = data[firstKey];
-           if (firstError is List) {
-             message = "$firstKey: ${firstError[0]}";
-           } else {
-             message = "$firstKey: $firstError";
-           }
+           message = firstError is List ? "$firstKey: ${firstError[0]}" : "$firstKey: $firstError";
         }
-      } else if (e.response?.statusMessage != null) {
-        message = e.response!.statusMessage!;
       }
-
       _showError(message);
     } catch (e) {
       debugPrint("❌ UNKNOWN ERROR: $e");
@@ -233,9 +237,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               ),
               
               const SizedBox(height: 25),
-
               _buildRoleSelector(),
-
               const SizedBox(height: 25),
 
               _buildGlassInput(
@@ -252,7 +254,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               ),
               const SizedBox(height: 16),
               
-              // DRIVER SPECIFIC FIELDS
               AnimatedCrossFade(
                 firstChild: Container(), 
                 secondChild: Column(
@@ -341,6 +342,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       ),
     );
   }
+
+  // --- Helper Widgets ---
 
   Widget _buildPhotoPicker() {
     return GestureDetector(
