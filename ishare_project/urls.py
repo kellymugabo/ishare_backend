@@ -2,27 +2,33 @@ from django.contrib import admin
 from django.urls import path, include, re_path
 from django.conf import settings
 from django.views.static import serve
-from core.views import fix_all_profiles, force_delete_user # <--- Import it
-
-# ✅ IMPORT THE REPAIR FUNCTION
-from core.views import fix_all_profiles 
+# ✅ Added the Refresh View import
+from rest_framework_simplejwt.views import TokenRefreshView 
+from core.views import fix_all_profiles, force_delete_user
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     
+    # ✅ FIX: Added JWT Refresh endpoint for Flutter
+    path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+
     # ✅ Subscriptions App
     path('api/subscriptions/', include('subscriptions.urls')),
 
     # ✅ CORE API Routes (Trips, Bookings, Auth, Profile)
     path('api/', include('core.urls')),
 
-    # ✅ REPAIR TOOL (Click this link to fix your database)
+    # ✅ REPAIR TOOLS (Useful for your IntegrityErrors)
     path('fix-profiles-now/', fix_all_profiles),
-    # ✅ FORCE DELETE LINK
     path('force-delete/<str:username>/', force_delete_user),
 
-    # ✅ FORCE MEDIA SERVING (For Railway)
-    re_path(r'^media/(?P<path>.*)$', serve, {
-        'document_root': settings.MEDIA_ROOT,
-    }),
+    # ✅ MEDIA SERVING
+    # Keep this only for local development. On DigitalOcean, Spaces handles this.
 ]
+
+if settings.DEBUG:
+    urlpatterns += [
+        re_path(r'^media/(?P<path>.*)$', serve, {
+            'document_root': settings.MEDIA_ROOT,
+        }),
+    ]
