@@ -1,6 +1,6 @@
 """
 Django settings for ishare_project project.
-Updated for DigitalOcean App Platform & Spaces
+Updated for DigitalOcean App Platform & Spaces - SESSION FIX VERSION
 """
 import os
 import dj_database_url
@@ -14,7 +14,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-your-secret-key-here-change-this-in-production')
 
 # ✅ SECURITY: Smart logic for Production (DigitalOcean) vs Local
-# DigitalOcean App Platform provides unique environment variables we can check.
 IS_DIGITALOCEAN = 'DIGITALOCEAN_APP_URL' in os.environ
 
 if IS_DIGITALOCEAN:
@@ -23,18 +22,16 @@ else:
     DEBUG = True
 
 # ✅ ALLOWED HOSTS
-# Added DigitalOcean domain pattern to your existing list.
 ALLOWED_HOSTS = [
     '*',
-    '.ondigitalocean.app',  # ✅ Added for DigitalOcean
+    '.ondigitalocean.app',
     'localhost',
     '127.0.0.1',
 ]
 
 # ✅ CSRF TRUSTED ORIGINS
-# Updated to trust DigitalOcean subdomains for secure POST requests.
 CSRF_TRUSTED_ORIGINS = [
-    'https://*.ondigitalocean.app',  # ✅ Added for DigitalOcean
+    'https://*.ondigitalocean.app',
     'http://localhost:3000',
 ]
 
@@ -53,7 +50,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'rest_framework.authtoken',
     'corsheaders', 
-    'storages',  # ✅ Required for DigitalOcean Spaces
+    'storages',
     
     # Your apps
     'subscriptions',
@@ -62,9 +59,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware', # ✅ Production Static Files
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',      # ✅ CORS (Critical for Flutter)
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -72,7 +69,9 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# ✅ Trust proxy headers for HTTPS detection (Required for DO App Platform)
+ROOT_URLCONF = 'ishare_project.urls'
+
+# ✅ Trust proxy headers for HTTPS detection
 if IS_DIGITALOCEAN or not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = True
@@ -81,23 +80,23 @@ if IS_DIGITALOCEAN or not DEBUG:
     SECURE_HSTS_PRELOAD = True
 
 # ============================================================
-# ✅ SESSION CONFIGURATION FOR DIGITALOCEAN LOAD BALANCER
+# ✅ SESSION CONFIGURATION - CRITICAL FIX FOR LOGIN ISSUES
 # ============================================================
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
-SESSION_COOKIE_SECURE = not DEBUG  # True in production
+SESSION_SAVE_EVERY_REQUEST = True  # CRITICAL: Saves session on every request
+SESSION_COOKIE_AGE = 86400 * 14  # 2 weeks
+SESSION_COOKIE_SECURE = not DEBUG  # HTTPS only in production
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SAMESITE = 'Lax'
-SESSION_COOKIE_DOMAIN = None  # ✅ FIXED: Let Django auto-detect the domain
-SESSION_COOKIE_AGE = 1209600  # 2 weeks
-SESSION_SAVE_EVERY_REQUEST = True  # ✅ ADDED: Keep session alive on every request
+SESSION_COOKIE_SAMESITE = 'Lax'  # More lenient than 'Strict'
+SESSION_COOKIE_NAME = 'ishare_sessionid'
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 
-# CSRF settings to match
+# ✅ CSRF CONFIGURATION
 CSRF_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = 'Lax'
-CSRF_COOKIE_DOMAIN = None  # ✅ FIXED: Let Django auto-detect the domain
-
-ROOT_URLCONF = 'ishare_project.urls'
+CSRF_USE_SESSIONS = False  # Use cookie-based CSRF
+CSRF_COOKIE_NAME = 'ishare_csrftoken'
 
 TEMPLATES = [
     {
@@ -121,7 +120,8 @@ WSGI_APPLICATION = 'ishare_project.wsgi.application'
 DATABASES = {
     'default': dj_database_url.config(
         default='sqlite:///' + os.path.join(BASE_DIR, 'db.sqlite3'),
-        conn_max_age=600
+        conn_max_age=0,  # Disabled pooling to avoid connection issues
+        conn_health_checks=True,  # Enable connection health checks
     )
 }
 
@@ -135,20 +135,16 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'Africa/Kigali'  # Rwanda timezone
+TIME_ZONE = 'Africa/Kigali'
 USE_I18N = True
 USE_TZ = True
 
-# ✅ STATIC FILES (CSS, JavaScript, Images)
+# ✅ STATIC FILES
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-# =========================================================
 # ✅ MEDIA FILES CONFIGURATION (DIGITALOCEAN SPACES)
-# =========================================================
-# Unlike Railway, DigitalOcean App Platform doesn't have permanent volumes.
-# We use "Spaces" (Object Storage) so your photos aren't deleted on redeploy.
 if IS_DIGITALOCEAN:
     AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
@@ -160,14 +156,12 @@ if IS_DIGITALOCEAN:
     DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
     MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
 else:
-    # If local laptop, use the default folder
     MEDIA_URL = '/media/'
     MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-# Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# ✅ CORS settings - Fixed for Flutter Web
+# ✅ CORS settings
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = ['DELETE', 'GET', 'OPTIONS', 'PATCH', 'POST', 'PUT']
@@ -178,7 +172,7 @@ CORS_ALLOW_HEADERS = [
     'access-control-allow-headers',
 ]
 CORS_EXPOSE_HEADERS = ['content-type', 'authorization']
-CORS_PREFLIGHT_MAX_AGE = 86400  # 24 hours
+CORS_PREFLIGHT_MAX_AGE = 86400
 
 # REST Framework settings
 REST_FRAMEWORK = {
@@ -220,3 +214,27 @@ EMAIL_USE_SSL = True
 EMAIL_HOST_USER = 'murenzicharles24@gmail.com'
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', 'itqipoohlekmayph')
 DEFAULT_FROM_EMAIL = 'ISHARE Support <murenzicharles24@gmail.com>'
+
+# ✅ LOGGING (Enable for debugging)
+# Uncomment to see session debug information
+"""
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'django.contrib.sessions': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+        },
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+    },
+}
+"""
