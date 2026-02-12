@@ -38,39 +38,49 @@ class ApiService {
         }
         return handler.next(options);
       },
-      onError: (DioException e, handler) async {
-        // Better error logging
-        if (kIsWeb && e.type == DioExceptionType.connectionError) {
-          debugPrint('❌ CORS/Network Error: ${e.message}');
-        } else {
-          debugPrint('❌ API Error: ${e.response?.statusCode} - ${e.message}');
+     onError: (DioException e, handler) async {
+  // Better error logging
+  if (kIsWeb && e.type == DioExceptionType.connectionError) {
+    debugPrint('❌ CORS/Network Error: ${e.message}');
+  } else {
+    debugPrint('❌ API Error: ${e.response?.statusCode} - ${e.message}');
+  }
+  
+  // ✅ FIX: Don't intercept 401s from login/auth endpoints
+  final requestPath = e.requestOptions.path;
+  if (requestPath.contains('/api/auth/token/') || 
+      requestPath.contains('/api/register/') ||
+      requestPath.contains('/api/auth/forgot-password/') ||
+      requestPath.contains('/api/auth/reset-password/')) {
+    debugPrint('⚠️ Auth endpoint failed - letting it handle its own error');
+    return handler.next(e);  // Don't try to refresh during login!
+  }
+  
+  if (e.response?.statusCode == 401 && !_isRefreshing) {
+    _isRefreshing = true;
+    debugPrint('🔄 Attempting token refresh...');
+    
+    try {
+      final refreshed = await _refreshToken();
+      if (refreshed) {
+        try {
+          final token = await _storage.read(key: 'access_token');
+          e.requestOptions.headers['Authorization'] = 'Bearer $token';
+          final response = await _dio.fetch(e.requestOptions);
+          return handler.resolve(response);
+        } catch (retryError) {
+          return handler.next(e);
         }
-        
-        if (e.response?.statusCode == 401 && !_isRefreshing) {
-          _isRefreshing = true;
-          debugPrint('🔄 Attempting token refresh...');
-          
-          try {
-            final refreshed = await _refreshToken();
-            if (refreshed) {
-              try {
-                final token = await _storage.read(key: 'access_token');
-                e.requestOptions.headers['Authorization'] = 'Bearer $token';
-                final response = await _dio.fetch(e.requestOptions);
-                return handler.resolve(response);
-              } catch (retryError) {
-                return handler.next(e);
-              }
-            } else {
-              await logout();
-              return handler.next(e);
-            }
-          } finally {
-            _isRefreshing = false;
-          }
-        }
+      } else {
+        await logout();
         return handler.next(e);
-      },
+      }
+    } finally {
+      _isRefreshing = false;
+    }
+  }
+  return handler.next(e);
+},
     ));
   } 
 
@@ -79,33 +89,60 @@ class ApiService {
   // =====================================================
 
   // ✅ Login
-  Future<Response> login({
-    required String username, 
-    required String password,
-    required String role, 
-  }) async {
-    try {
-      final response = await _dio.post(
-        '/api/auth/token/', 
-        data: {
-          'username': username, 
-          'password': password,
-          'role': role 
-        },
-      );
+  // ✅ Login
+Future<Response> login({
+  required String username, 
+  required String password,
+  required String role, 
+}) async {
+  try {
+    final response = await _dio.post(
+      '/api/auth/token/', 
+      data: {
+        'username': username, 
+        'password': password,
+        // role is not sent to backend
+      },
+    );
 
-      if (response.statusCode == 200) {
-        await _storage.write(key: 'access_token', value: response.data['access']);
-        await _storage.write(key: 'refresh_token', value: response.data['refresh']);
-        await _storage.write(key: 'user_role', value: role); 
-        debugPrint('✅ Login successful (Token & Role Saved)');
+    if (response.statusCode == 200) {
+      debugPrint('📦 FULL Response: ${response.data}');
+      debugPrint('🔑 Access Token Length: ${response.data['access']?.length ?? 0}');
+      
+      await _storage.write(key: 'access_token', value: response.data['access']);
+      await _storage.write(key: 'refresh_token', value: response.data['refresh']);
+      await _storage.write(key: 'user_role', value: role); 
+      
+      final saved = await _storage.read(key: 'access_token');
+      debugPrint('💾 Token saved: ${saved == response.data['access']}');
+      
+      // Test token immediately
+      debugPrint('🧪 Testing token...');
+      try {
+        final testDio = Dio();
+        testDio.options.baseUrl = baseUrl;
+        final testResponse = await testDio.get(
+          '/api/profiles/me/',
+          options: Options(
+            headers: {'Authorization': 'Bearer ${response.data['access']}'},
+          ),
+        );
+        debugPrint('✅ Token works! Status: ${testResponse.statusCode}');
+      } catch (testError) {
+        debugPrint('❌ TOKEN TEST FAILED: $testError');
+        if (testError is DioException) {
+          debugPrint('Response: ${testError.response?.data}');
+        }
       }
-      return response; 
-    } catch (e) {
-      debugPrint('❌ Login failed: $e');
-      rethrow;
+      
+      debugPrint('✅ Login successful (Token & Role Saved)');
     }
+    return response; 
+  } catch (e) {
+    debugPrint('❌ Login failed: $e');
+    rethrow;
   }
+}
 
   // ✅ Register (Modified to accept FormData directly)
   Future<void> register(FormData data) async {
@@ -394,39 +431,40 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> checkDriverVerification() async {
-    try {
-      final response = await _dio.get('/api/driver/verification-status/');
-      final data = response.data ?? {};
-      
-      debugPrint('📡 Raw Backend Response: $data');
-      
-      // Get status as string (handle both string and enum cases)
-      final statusStr = data['status']?.toString().toLowerCase();
-      final isVerified = data['is_verified'] == true || 
-                         data['is_verified'] == 'true' || 
-                         statusStr == 'approved';
-      
-      // Normalize the response
-      final normalized = {
-        'is_verified': isVerified,
-        'status': statusStr ?? (isVerified ? 'approved' : 'none'),
-        'has_pending': statusStr == 'pending',
-      };
-      
-      data.forEach((key, value) {
-        if (!normalized.containsKey(key)) {
-          normalized[key] = value;
-        }
-      });
-      
-      return normalized;
-    } catch (e) {
-      debugPrint('❌ Error checking driver verification status: $e');
-      rethrow;
-    }
+ Future<Map<String, dynamic>> checkDriverVerification() async {
+  try {
+    final response = await _dio.get('/api/driver/verification-status/');
+    final data = response.data ?? {};
+    
+    debugPrint('📡 Raw Backend Response: $data');
+    
+    // Safely get status (handle null)
+    final statusStr = data['status']?.toString().toLowerCase();
+    final isVerified = data['is_verified'] == true || 
+                       data['is_verified'] == 'true' || 
+                       statusStr == 'approved';
+    
+    // Normalize the response with null-safe access
+    final normalized = {
+      'is_verified': isVerified,
+      'status': statusStr ?? (isVerified ? 'approved' : 'none'),
+      'has_pending': statusStr == 'pending',
+      'rejection_reason': data['rejection_reason'], // Allow null
+    };
+    
+    // Add any extra fields from backend
+    data.forEach((key, value) {
+      if (!normalized.containsKey(key)) {
+        normalized[key] = value;
+      }
+    });
+    
+    return normalized;
+  } catch (e) {
+    debugPrint('❌ Error checking driver verification status: $e');
+    rethrow;
   }
-
+}
   Future<bool> isDriverVerified() async {
     try {
       final response = await _dio.get('/api/driver/verification-status/');

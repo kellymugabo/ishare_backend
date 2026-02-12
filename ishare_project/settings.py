@@ -77,6 +77,29 @@ if IS_DIGITALOCEAN or not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     USE_TZ = True
 
+    # ✅ Trust proxy headers for HTTPS detection (Required for DO App Platform)
+if IS_DIGITALOCEAN or not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    USE_TZ = True
+
+# ============================================================
+# ✅ SESSION CONFIGURATION FOR DIGITALOCEAN LOAD BALANCER
+# ============================================================
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_SECURE = not DEBUG  # True in production
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_DOMAIN = '.ondigitalocean.app' if IS_DIGITALOCEAN else None
+SESSION_COOKIE_AGE = 1209600  # 2 weeks
+
+# CSRF settings to match
+CSRF_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_DOMAIN = '.ondigitalocean.app' if IS_DIGITALOCEAN else None
+
+ROOT_URLCONF = 'ishare_project.urls'
+
 ROOT_URLCONF = 'ishare_project.urls'
 
 TEMPLATES = [

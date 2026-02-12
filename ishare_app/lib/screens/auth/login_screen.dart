@@ -81,78 +81,64 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with TickerProviderSt
     setState(() => _isLoading = true);
     FocusScope.of(context).unfocus();
 
-    try {
-      final initialApi = ref.read(apiServiceProvider);
+  try {
+  final initialApi = ref.read(apiServiceProvider);
 
-      // 2. Perform Login (Get Token)
-      final response = await initialApi.login(
-        username: _usernameController.text.trim(),
-        password: _passwordController.text,
-        role: _isDriver ? 'driver' : 'passenger',
-      );
+  // 2. Perform Login (Get Token)
+  final response = await initialApi.login(
+    username: _usernameController.text.trim(),
+    password: _passwordController.text,
+    role: _isDriver ? 'driver' : 'passenger',
+  );
 
-      var token = response.data['access'];
-      if (token == null) throw Exception("No token received");
+  var token = response.data['access'];
+  if (token == null) throw Exception("No token received");
 
-      // 3. Save Token Temporarily
-      await _storage.write(key: 'auth_token', value: token);
+  // 3. Token is already saved by login method - no need to save again
+  // The login method in api_service.dart handles token storage
 
-      // ============================================================
-      // 🛑 CRITICAL FIX: REFRESH CONNECTION & STATE
-      // ============================================================
-      
-      // A. Force ApiService to restart so it reads the NEW token from storage
-      ref.invalidate(apiServiceProvider);
-      
-      // B. Clear any old user profile data from memory (Reset Profile Screen)
-      ref.invalidate(currentUserProvider);
+  // ============================================================
+  // 🛡️ ROLE VERIFICATION (using the same API instance)
+  // ============================================================
+  try {
+    // Use the SAME api instance that just logged in (already has token)
+    final userProfile = await initialApi.fetchMyProfile();
+    
+    final String realRole = (userProfile.role ?? "").toLowerCase();
 
-      // C. Get the NEW ApiService (now authenticated with the new token)
-      final freshApi = ref.read(apiServiceProvider);
+    // CASE A: User selected "Driver" but is actually a "Passenger"
+    if (_isDriver && realRole != 'driver') {
+      await initialApi.logout(); // Logout using the API service
+      throw "Access Denied: You are not a registered Driver.";
+    }
+    
+    // CASE B: User selected "Passenger" but is actually a "Driver"
+    if (!_isDriver && realRole == 'driver') {
+      await initialApi.logout(); // Logout using the API service
+      throw "Access Denied: You are a Driver. Please switch to Driver login.";
+    }
 
-      // ============================================================
-      // 🛡️ STRICT ROLE VERIFICATION
-      // ============================================================
-      try {
-        final userProfile = await freshApi.fetchMyProfile();
-        
-        // ✅ FIX: Safe access to role with default value to prevent crash
-        final String realRole = (userProfile.role ?? "").toLowerCase();
+    // Success: Role matches
+    // Token is already saved, just invalidate cache to refresh UI
+    ref.invalidate(currentUserProvider); // Refresh profile cache
 
-        // CASE A: User selected "Driver" but is actually a "Passenger"
-        if (_isDriver && realRole != 'driver') {
-          throw "Access Denied: You are not a registered Driver.";
-        }
-        
-        // CASE B: User selected "Passenger" but is actually a "Driver"
-        if (!_isDriver && realRole == 'driver') {
-          throw "Access Denied: You are a Driver. Please switch to Driver login.";
-        }
+  } catch (roleError) {
+    // If Role Mismatch or fetch failed
+    throw roleError.toString(); 
+  }
+  // ============================================================
 
-        // Success: Save role
-        await _storage.write(key: 'user_role', value: realRole);
-
-      } catch (roleError) {
-        // If Role Mismatch: Logout immediately
-        await _storage.deleteAll();
-        ref.invalidate(apiServiceProvider);
-        
-        // Show error in SnackBar
-        throw roleError.toString(); 
-      }
-      // ============================================================
-
-      // 4. Navigate to Home (MainWrapper)
-      if (mounted) {
-        HapticFeedback.mediumImpact();
-        Navigator.of(context).pushReplacement(
-          PageRouteBuilder(
-            pageBuilder: (_, __, ___) => const MainWrapper(),
-            transitionsBuilder: (_, a, __, c) => FadeTransition(opacity: a, child: c),
-            transitionDuration: const Duration(milliseconds: 600),
-          ),
-        );
-      }
+  // 4. Navigate to Home (MainWrapper)
+  if (mounted) {
+    HapticFeedback.mediumImpact();
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => const MainWrapper(),
+        transitionsBuilder: (_, a, __, c) => FadeTransition(opacity: a, child: c),
+        transitionDuration: const Duration(milliseconds: 600),
+      ),
+    );
+  }
     } catch (e) {
       if (mounted) {
         _shakeController.forward().then((_) => _shakeController.reset());
