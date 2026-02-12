@@ -18,6 +18,7 @@ import 'profile_screen.dart';
 import 'create_trips_screen.dart';
 import 'my_trips.dart';
 import 'FindRides.dart';
+import '../welcome_screen.dart'; // ✅ Added missing import
 import 'package:ishare_app/features/subscription/subscription_screen.dart';
 
 // ==============================================================================
@@ -55,7 +56,6 @@ class MainWrapper extends ConsumerWidget {
         ];
 
         return Scaffold(
-          // IndexedStack keeps the state of pages alive when switching tabs
           body: IndexedStack(
             index: selectedIndex,
             children: screens,
@@ -106,7 +106,11 @@ class MainWrapper extends ConsumerWidget {
         );
       },
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (err, stack) => const WelcomeScreen(),
+      // ✅ FIXED: Corrected error block, removed redundant entries and 'const'
+      error: (err, stack) {
+        debugPrint('MainWrapper Role Error: $err');
+        return const WelcomeScreen();
+      },
     );
   }
 }

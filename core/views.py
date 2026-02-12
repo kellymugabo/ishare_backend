@@ -436,7 +436,7 @@ def submit_driver_verification(request):
     
     serializer = DriverVerificationSerializer(data=request.data, context={'request': request})
     if serializer.is_valid():
-        serializer.save()
+        serializer.save(user=request.user, status=VerificationStatus.PENDING)  # ✅ FIX
         return Response({'message': 'Submitted successfully'}, status=201)
     return Response(serializer.errors, status=400)
 
