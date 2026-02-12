@@ -1,6 +1,6 @@
 """
 Django settings for ishare_project project.
-Updated for DigitalOcean App Platform & Spaces - FINAL STABLE VERSION
+Updated for DigitalOcean App Platform & Spaces - COMPLETE PRODUCTION VERSION
 """
 import os
 import dj_database_url
@@ -13,8 +13,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-your-secret-key-here-change-this-in-production')
 
-# ✅ SECURITY: Smart logic for Production (DigitalOcean) vs Local
-IS_DIGITALOCEAN = 'DIGITALOCEAN_APP_URL' in os.environ
+# ✅ ROBUST PRODUCTION DETECTION
+# Using /workspace (DO default) or the presence of a Database URL
+IS_DIGITALOCEAN = os.environ.get('HOME') == '/workspace' or 'DATABASE_URL' in os.environ
 
 if IS_DIGITALOCEAN:
     DEBUG = False
@@ -30,7 +31,7 @@ ALLOWED_HOSTS = [
     '*', 
 ]
 
-# ✅ CSRF TRUSTED ORIGINS - Fixed to include the specific DO URL
+# ✅ CSRF TRUSTED ORIGINS
 CSRF_TRUSTED_ORIGINS = [
     'https://seashell-app-sz2nv.ondigitalocean.app',
     'https://*.ondigitalocean.app',
@@ -59,11 +60,11 @@ INSTALLED_APPS = [
     'core',
 ]
 
-# ✅ MIDDLEWARE ORDER RE-ARRANGED FOR OPTIMAL COOKIE/CORS HANDLING
+# ✅ MIDDLEWARE ORDER (CRITICAL: Cors and WhiteNoise at the top)
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware', # Static files first
-    'corsheaders.middleware.CorsMiddleware',       # CORS before Common
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -74,8 +75,8 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'ishare_project.urls'
 
-# ✅ Trust proxy headers for HTTPS detection (CRITICAL FOR DIGITALOCEAN)
-if IS_DIGITALOCEAN or not DEBUG:
+# ✅ HTTPS & PROXY SETTINGS
+if IS_DIGITALOCEAN:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = True
     SECURE_HSTS_SECONDS = 31536000
@@ -83,7 +84,7 @@ if IS_DIGITALOCEAN or not DEBUG:
     SECURE_HSTS_PRELOAD = True
 
 # ============================================================
-# ✅ SESSION & CSRF CONFIGURATION
+# ✅ SESSION & CSRF CONFIGURATION (FIXES LOGIN LOOP)
 # ============================================================
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_SAVE_EVERY_REQUEST = True 
@@ -94,12 +95,12 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_NAME = 'ishare_sessionid'
 
 CSRF_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_HTTPONLY = False  # Must be False for some JS frameworks to read it
+CSRF_COOKIE_HTTPONLY = False  
 CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_USE_SESSIONS = False 
 CSRF_COOKIE_NAME = 'ishare_csrftoken'
 
-# This helps avoid session loss on subdomains
+# Force domain consistency in production
 if IS_DIGITALOCEAN:
     SESSION_COOKIE_DOMAIN = 'seashell-app-sz2nv.ondigitalocean.app'
     CSRF_COOKIE_DOMAIN = 'seashell-app-sz2nv.ondigitalocean.app'
@@ -123,7 +124,6 @@ TEMPLATES = [
 WSGI_APPLICATION = 'ishare_project.wsgi.application'
 
 # ✅ DATABASE CONFIGURATION
-# Note: Ensure you are using a Managed DB in DO. SQLite will reset on every deploy.
 DATABASES = {
     'default': dj_database_url.config(
         default='sqlite:///' + os.path.join(BASE_DIR, 'db.sqlite3'),
@@ -168,7 +168,7 @@ else:
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# ✅ CORS settings
+# ✅ CORS SETTINGS
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
@@ -176,7 +176,7 @@ CORS_ALLOW_CREDENTIALS = True
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-        'rest_framework.authentication.SessionAuthentication', # Added for Admin compatibility
+        'rest_framework.authentication.SessionAuthentication', 
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
