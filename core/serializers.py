@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.conf import settings
 import os
@@ -76,15 +77,36 @@ class DriverVerificationSerializer(serializers.ModelSerializer):
         user = validated_data.pop('user', None) or self.context['request'].user
         status = validated_data.pop('status', VerificationStatus.PENDING)
         
-        # Delete any existing verification for this user
-        DriverVerification.objects.filter(user=user).delete()
+        # Check if verification already exists
+        existing = DriverVerification.objects.filter(user=user).first()
         
-        # Create new verification with user, status, and all validated data
+        if existing:
+            # If already approved, don't allow resubmission
+            if existing.status == VerificationStatus.APPROVED:
+                raise serializers.ValidationError("You are already verified and cannot resubmit!")
+            
+            # If rejected or pending, update the existing one
+            existing.full_name = validated_data.get('full_name', existing.full_name)
+            existing.national_id = validated_data.get('national_id', existing.national_id)
+            existing.phone_number = validated_data.get('phone_number', existing.phone_number)
+            
+            if 'national_id_photo' in validated_data:
+                existing.national_id_photo = validated_data['national_id_photo']
+            if 'license_photo' in validated_data:
+                existing.license_photo = validated_data['license_photo']
+            
+            existing.status = status
+            existing.submitted_at = timezone.now()
+            existing.save()
+            return existing
+        
+        # Create new verification if none exists
         return DriverVerification.objects.create(
             user=user, 
             status=status, 
             **validated_data
         )
+
 
 # -------------------- USER + AUTH --------------------
 class UserSerializer(serializers.ModelSerializer):

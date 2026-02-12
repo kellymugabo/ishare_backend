@@ -427,17 +427,39 @@ class PaymentViewSet(viewsets.ViewSet):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def submit_driver_verification(request):
+    # Check if already approved
     existing = DriverVerification.objects.filter(
         user=request.user,
-        status__in=[VerificationStatus.PENDING, VerificationStatus.APPROVED]
+        status=VerificationStatus.APPROVED
     ).first()
-    if existing:
-        return Response({'error': f'Request already {existing.status}'}, status=400)
     
+    if existing:
+        return Response({
+            'error': 'You are already verified!',
+            'status': 'approved'
+        }, status=400)
+    
+    # Check if pending (optional - allow resubmission to fix mistakes)
+    pending = DriverVerification.objects.filter(
+        user=request.user,
+        status=VerificationStatus.PENDING
+    ).first()
+    
+    if pending:
+        return Response({
+            'error': 'Your verification is already pending review',
+            'status': 'pending'
+        }, status=400)
+    
+    # Allow submission (new or rejected cases)
     serializer = DriverVerificationSerializer(data=request.data, context={'request': request})
     if serializer.is_valid():
-        serializer.save(user=request.user, status=VerificationStatus.PENDING)  # ✅ FIX
-        return Response({'message': 'Submitted successfully'}, status=201)
+        serializer.save(user=request.user, status=VerificationStatus.PENDING)
+        return Response({
+            'message': 'Verification submitted successfully',
+            'status': 'pending'
+        }, status=201)
+    
     return Response(serializer.errors, status=400)
 
 @api_view(['GET'])
