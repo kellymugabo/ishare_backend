@@ -72,10 +72,19 @@ class DriverVerificationSerializer(serializers.ModelSerializer):
         return formatted
 
     def create(self, validated_data):
-        user = self.context['request'].user
+        # Extract user and status from kwargs (passed from view)
+        user = validated_data.pop('user', None) or self.context['request'].user
+        status = validated_data.pop('status', VerificationStatus.PENDING)
+        
+        # Delete any existing verification for this user
         DriverVerification.objects.filter(user=user).delete()
-        return DriverVerification.objects.create(user=user, **validated_data)
-
+        
+        # Create new verification with user, status, and all validated data
+        return DriverVerification.objects.create(
+            user=user, 
+            status=status, 
+            **validated_data
+        )
 
 # -------------------- USER + AUTH --------------------
 class UserSerializer(serializers.ModelSerializer):
